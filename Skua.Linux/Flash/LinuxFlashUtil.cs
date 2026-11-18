@@ -26,6 +26,7 @@ public class LinuxFlashUtil : IFlashUtil
     private readonly ConcurrentDictionary<int, TaskCompletionSource<string>> _pendingRequests = new();
     private readonly SemaphoreSlim _writeLock = new(1, 1);
     private int _nextReqId;
+    private string? _sessionDir;
 
     public event FlashCallHandler? FlashCall;
     public event Action<int>? FlashProcessStarted;
@@ -53,8 +54,19 @@ public class LinuxFlashUtil : IFlashUtil
             int port = ((IPEndPoint)_listener.LocalEndpoint).Port;
 
             string baseDir = AppContext.BaseDirectory;
+            string skuaData = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "Skua");
+            string sessionsBase = Path.Combine(skuaData, "Sessions");
+            try { Directory.CreateDirectory(sessionsBase); } catch { }
+
+            _sessionDir = Path.Combine(sessionsBase, $"{Environment.ProcessId}_{port}");
+            try { Directory.CreateDirectory(_sessionDir); } catch { }
+
+            string instancePortFile = Path.Combine(_sessionDir, "skua_bridge.port");
+            File.WriteAllText(instancePortFile, port.ToString());
+
+            // Also keep baseDir copy for backwards compatibility
             string portFile = Path.Combine(baseDir, "skua_bridge.port");
-            File.WriteAllText(portFile, port.ToString());
+            try { File.WriteAllText(portFile, port.ToString()); } catch { }
 
             _ = Task.Run(() => AcceptLoopAsync(_cts.Token));
 
@@ -79,7 +91,7 @@ public class LinuxFlashUtil : IFlashUtil
             {
                 FileName = playerBin,
                 Arguments = $"\"{swfPath}\"",
-                WorkingDirectory = baseDir,
+                WorkingDirectory = _sessionDir,
                 UseShellExecute = false
             };
             psi.Environment["GDK_BACKEND"] = "x11";
@@ -302,6 +314,12 @@ public class LinuxFlashUtil : IFlashUtil
                 _flashProcess.Dispose();
                 _flashProcess = null;
             }
+        }
+
+        if (!string.IsNullOrEmpty(_sessionDir) && Directory.Exists(_sessionDir))
+        {
+            try { Directory.Delete(_sessionDir, true); } catch { }
+            _sessionDir = null;
         }
     }
 

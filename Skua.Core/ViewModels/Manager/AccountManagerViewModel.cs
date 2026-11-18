@@ -356,6 +356,16 @@ public sealed partial class AccountManagerViewModel : BotControlViewModelBase
                 psi.ArgumentList.Add(ScriptPath);
             }
 
+            if (!OperatingSystem.IsWindows())
+            {
+                string home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+                psi.Environment["DOTNET_ROOT"] = Environment.GetEnvironmentVariable("DOTNET_ROOT") ?? Path.Combine(home, ".dotnet");
+                psi.Environment["GDK_BACKEND"] = "x11";
+                psi.Environment["WAYLAND_DISPLAY"] = "";
+                string path = Environment.GetEnvironmentVariable("PATH") ?? "";
+                psi.Environment["PATH"] = $"{Path.Combine(home, ".dotnet")}:{Path.Combine(home, ".local", "bin")}:{path}";
+            }
+
             Process? process = Process.Start(psi);
             if (process != null)
             {

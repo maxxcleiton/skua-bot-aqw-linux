@@ -8,6 +8,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Skua.Core.AppStartup;
 using Skua.Core.Interfaces;
 using Skua.Core.Utils;
+using Skua.Core.ViewModels.Manager;
 using Skua.Linux.Services;
 using Westwind.Scripting;
 
@@ -100,6 +101,7 @@ public partial class App : Application
         services.AddScriptableObjects();
         services.AddCompiler();
         services.AddSkuaMainAppViewModels();
+        services.AddSingleton<AccountManagerViewModel>();
 
         ServiceProvider provider = services.BuildServiceProvider();
         Ioc.Default.ConfigureServices(provider);

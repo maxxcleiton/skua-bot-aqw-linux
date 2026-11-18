@@ -483,6 +483,7 @@ public class MainWindow : Window
                 new() { Header = "Scripts", Content = BuildScriptsTab() },
                 new() { Header = "Repo", Content = BuildScriptRepoTab() },
                 new() { Header = "Runtime", Content = RuntimeAndTravelTabs.BuildRuntimeTab(_services) },
+                new() { Header = "Accounts", Content = AccountsTab.BuildAccountsTab(_services) },
                 new() { Header = "Grab", Content = BuildGrabberTab() },
                 new() { Header = "Map", Content = RuntimeAndTravelTabs.BuildAutoAndMapTab(_services) },
                 new() { Header = "Pkts", Content = BuildPacketsTab() },
