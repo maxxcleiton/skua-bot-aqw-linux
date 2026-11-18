@@ -82,6 +82,9 @@ public class LinuxFlashUtil : IFlashUtil
                 WorkingDirectory = baseDir,
                 UseShellExecute = false
             };
+            psi.Environment["GDK_BACKEND"] = "x11";
+            psi.Environment["vblank_mode"] = "0";
+            psi.Environment["VDPAU_DRIVER"] = "va_gl";
 
             _flashProcess = Process.Start(psi);
             if (_flashProcess is not null)

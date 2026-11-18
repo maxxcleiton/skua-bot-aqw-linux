@@ -50,6 +50,8 @@ public class Main extends MovieClip {
     private var customBackgroundURL:String;
     private var packetClient:*;
     private var packetDebug:Boolean;
+    private static var _targetFPS:int = 60;
+    private static var _targetQuality:String = "medium";
 
     public function Main() {
         String.prototype.trim = function():String {
@@ -119,11 +121,12 @@ public class Main extends MovieClip {
         }
 
         this.stg = stage;
-        this.stg.frameRate = 60;
         this.stg.removeChildAt(0);
         this.game = this.stg.addChild(this.loader.content);
         this.stg.scaleMode = StageScaleMode.SHOW_ALL;
         this.stg.align = StageAlign.TOP;
+        this.stg.frameRate = _targetFPS;
+        this.stg.quality = _targetQuality;
 
         for (var param:String in root.loaderInfo.parameters) {
             this.game.params[param] = root.loaderInfo.parameters[param];
@@ -193,6 +196,14 @@ public class Main extends MovieClip {
     }
 
     private function monitorLoginScreen(event:Event):void {
+        if (this.stg) {
+            if (this.stg.frameRate != _targetFPS) {
+                this.stg.frameRate = _targetFPS;
+            }
+            if (this.stg.quality.toLowerCase() != _targetQuality) {
+                this.stg.quality = _targetQuality;
+            }
+        }
         if (!this.customBGReady || !this.game || !this.game.mcLogin) return;
         
         if (this.game.mcLogin.visible && this.game.mcLogin.mcTitle) {
@@ -384,14 +395,20 @@ public class Main extends MovieClip {
     }
 
     public static function setFrameRate(fps:int):void {
-        if (instance && instance.stage && fps > 0) {
-            instance.stage.frameRate = fps;
+        if (fps > 0) {
+            _targetFPS = fps;
+            if (instance && instance.stage) {
+                instance.stage.frameRate = fps;
+            }
         }
     }
 
     public static function setStageQuality(quality:String):void {
-        if (instance && instance.stage && quality) {
-            instance.stage.quality = quality.toLowerCase();
+        if (quality) {
+            _targetQuality = quality.toLowerCase();
+            if (instance && instance.stage) {
+                instance.stage.quality = _targetQuality;
+            }
         }
     }
 
