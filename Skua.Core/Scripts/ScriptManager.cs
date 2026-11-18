@@ -461,22 +461,23 @@ public partial class ScriptManager : ObservableObject, IScriptManager, IDisposab
                 continue;
 
             string cmd = parts[0][5..];
+            string normalizedTarget = parts[1].Replace('\\', '/');
             switch (cmd)
             {
                 case "ref":
-                    string local = Path.Combine(ClientFileSources.SkuaScriptsDIR, parts[1].Replace("Scripts/", ""));
+                    string local = Path.Combine(ClientFileSources.SkuaScriptsDIR, normalizedTarget.Replace("Scripts/", "").Replace('/', Path.DirectorySeparatorChar));
                     if (File.Exists(local))
                         references.Add(local);
-                    else if (File.Exists(parts[1]))
-                        references.Add(parts[1]);
+                    else if (File.Exists(normalizedTarget))
+                        references.Add(normalizedTarget);
                     break;
 
                 case "include":
-                    string localSource = Path.Combine(ClientFileSources.SkuaScriptsDIR, parts[1].Replace("Scripts/", ""));
+                    string localSource = Path.Combine(ClientFileSources.SkuaScriptsDIR, normalizedTarget.Replace("Scripts/", "").Replace('/', Path.DirectorySeparatorChar));
                     if (File.Exists(localSource))
                         filesToInclude.Add(localSource);
-                    else if (File.Exists(parts[1]))
-                        filesToInclude.Add(parts[1]);
+                    else if (File.Exists(normalizedTarget))
+                        filesToInclude.Add(normalizedTarget);
                     break;
             }
             linesToRemove.Add(lineStr);
@@ -622,22 +623,23 @@ public partial class ScriptManager : ObservableObject, IScriptManager, IDisposab
                 if (parts.Length >= 2)
                 {
                     string cmd = parts[0][5..];
+                    string normalizedTarget = parts[1].Replace('\\', '/');
                     switch (cmd)
                     {
                         case "ref":
-                            string refLocal = Path.Combine(ClientFileSources.SkuaScriptsDIR, parts[1].Replace("Scripts/", ""));
+                            string refLocal = Path.Combine(ClientFileSources.SkuaScriptsDIR, normalizedTarget.Replace("Scripts/", "").Replace('/', Path.DirectorySeparatorChar));
                             if (File.Exists(refLocal))
                                 references.Add(refLocal);
-                            else if (File.Exists(parts[1]))
-                                references.Add(parts[1]);
+                            else if (File.Exists(normalizedTarget))
+                                references.Add(normalizedTarget);
                             break;
 
                         case "include":
-                            string includeLocal = Path.Combine(ClientFileSources.SkuaScriptsDIR, parts[1].Replace("Scripts/", ""));
+                            string includeLocal = Path.Combine(ClientFileSources.SkuaScriptsDIR, normalizedTarget.Replace("Scripts/", "").Replace('/', Path.DirectorySeparatorChar));
                             if (File.Exists(includeLocal))
                                 includes.Add(includeLocal);
-                            else if (File.Exists(parts[1]))
-                                includes.Add(parts[1]);
+                            else if (File.Exists(normalizedTarget))
+                                includes.Add(normalizedTarget);
                             break;
                     }
                 }
@@ -1242,8 +1244,8 @@ public partial class ScriptManager : ObservableObject, IScriptManager, IDisposab
                 string[] parts = lineStr.Split((char[])null!, 2, StringSplitOptions.RemoveEmptyEntries);
                 if (parts.Length >= 2)
                 {
-                    string includePath = parts[1];
-                    string localPath = Path.Combine(ClientFileSources.SkuaScriptsDIR, includePath.Replace("Scripts/", ""));
+                    string includePath = parts[1].Replace('\\', '/');
+                    string localPath = Path.Combine(ClientFileSources.SkuaScriptsDIR, includePath.Replace("Scripts/", "").Replace('/', Path.DirectorySeparatorChar));
                     if (File.Exists(localPath))
                         dependencies.Add(localPath);
                     else if (File.Exists(includePath))
@@ -1289,11 +1291,12 @@ public partial class ScriptManager : ObservableObject, IScriptManager, IDisposab
             string cmd = parts[0][5..];
             if (cmd == "ref")
             {
-                string local = Path.Combine(ClientFileSources.SkuaScriptsDIR, parts[1].Replace("Scripts/", ""));
+                string normalizedTarget = parts[1].Replace('\\', '/');
+                string local = Path.Combine(ClientFileSources.SkuaScriptsDIR, normalizedTarget.Replace("Scripts/", "").Replace('/', Path.DirectorySeparatorChar));
                 if (File.Exists(local))
                     references.Add(local);
-                else if (File.Exists(parts[1]))
-                    references.Add(parts[1]);
+                else if (File.Exists(normalizedTarget))
+                    references.Add(normalizedTarget);
             }
 
             linesToRemove.Add(new string(sourceSpan[start..(start + newlinePos + 1)]));

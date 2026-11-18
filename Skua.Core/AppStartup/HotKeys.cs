@@ -33,6 +33,9 @@ internal class HotKeys
 
     private static bool CanExecuteHotKey()
     {
+        if (!OperatingSystem.IsWindows())
+            return true;
+
         try
         {
             IntPtr foregroundWindow = GetForegroundWindow();

@@ -21,7 +21,7 @@ public partial class ScriptInfoViewModel : ObservableObject
     public int Size => Info.Size;
     public string LocalFile => Info.LocalFile;
     public string FilePath => Info.FilePath;
-    public string ScriptPath => Path.Combine(ClientFileSources.SkuaScriptsDIR, FilePath.Replace("/", "\\"));
+    public string ScriptPath => Path.Combine(ClientFileSources.SkuaScriptsDIR, FilePath.Replace('/', Path.DirectorySeparatorChar).Replace('\\', Path.DirectorySeparatorChar));
     public string ScriptPathFromScriptsDir => ScriptPath.Replace(ClientFileSources.SkuaScriptsDIR + Path.DirectorySeparatorChar, "");
     public string FormattedCreationDate => Info.CreationDate.HasValue && Info.CreationDate.Value > DateTime.MinValue ? Info.CreationDate.Value.ToString("MMM dd, yyyy") : "Unknown";
 

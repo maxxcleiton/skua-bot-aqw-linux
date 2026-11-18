@@ -22,9 +22,10 @@ public class ProcessStartService : IProcessService
     {
         ProcessStartInfo ps = new(link)
         {
-            UseShellExecute = true,
-            Verb = "open"
+            UseShellExecute = true
         };
+        if (OperatingSystem.IsWindows())
+            ps.Verb = "open";
         Process.Start(ps);
     }
 
@@ -83,11 +84,18 @@ public class ProcessStartService : IProcessService
     {
         try
         {
-            Process.Start("notepad", string.IsNullOrEmpty(path) ? string.Empty : Quote(path));
+            if (OperatingSystem.IsWindows())
+            {
+                Process.Start("notepad", string.IsNullOrEmpty(path) ? string.Empty : Quote(path));
+            }
+            else
+            {
+                Process.Start("xdg-open", string.IsNullOrEmpty(path) ? Quote(_scriptsPath) : Quote(path));
+            }
         }
         catch (Win32Exception)
         {
-            _dialogService.ShowMessageBox("Neither VSCode nor Notepad could be started.", "Editor not found");
+            _dialogService.ShowMessageBox("Neither VSCode nor a system editor could be started.", "Editor not found");
         }
     }
 

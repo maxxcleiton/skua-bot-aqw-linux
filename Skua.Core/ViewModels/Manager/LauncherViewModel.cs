@@ -75,7 +75,8 @@ public partial class LauncherViewModel : BotControlViewModelBase, IDisposable
 
             try
             {
-                Process? proc = Process.Start("./Skua.exe", args);
+                string exeName = OperatingSystem.IsWindows() ? "./Skua.exe" : Path.Combine(AppContext.BaseDirectory, "Skua");
+                Process? proc = Process.Start(exeName, args);
                 if (proc != null)
                 {
                     ProcessInfo procInfo = new(proc, $"Skua #{proc.Id}");
@@ -86,7 +87,7 @@ public partial class LauncherViewModel : BotControlViewModelBase, IDisposable
             {
                 IDialogService dialogService = Ioc.Default.GetService<IDialogService>()!;
 
-                dialogService.ShowMessageBox("Failed to launch Skua. Make sure Skua.exe is in the same folder as Skua.Manager.exe.", "Error");
+                dialogService.ShowMessageBox("Failed to launch Skua. Make sure Skua executable is in the same folder as Skua.Manager.", "Error");
             }
         });
     }

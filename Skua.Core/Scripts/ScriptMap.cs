@@ -202,8 +202,9 @@ public partial class ScriptMap : IScriptMap
 
             try
             {
-                string scriptsPath = $"{_cachePath}\\tmp\\scripts";
-                string flaDirectory = Directory.Exists($"{Path.Combine(scriptsPath, FlaName)}") ? Path.Combine(scriptsPath, FlaName) : Path.Combine(scriptsPath, "town_fla");
+                string tmpPath = Path.Combine(_cachePath, "tmp");
+                string scriptsPath = Path.Combine(tmpPath, "scripts");
+                string flaDirectory = Directory.Exists(Path.Combine(scriptsPath, FlaName)) ? Path.Combine(scriptsPath, FlaName) : Path.Combine(scriptsPath, "town_fla");
 
                 if (!Directory.Exists(flaDirectory))
                     return null;
@@ -213,7 +214,7 @@ public partial class ScriptMap : IScriptMap
                     return null;
 
                 MainTimelineText = File.ReadAllLines(mainTimelinePath).ToList();
-                string[] files = Directory.GetFiles($@"{_cachePath}\tmp\scripts", "*APOP*", SearchOption.TopDirectoryOnly);
+                string[] files = Directory.GetFiles(scriptsPath, "*APOP*", SearchOption.TopDirectoryOnly);
 
                 IEnumerable<Tuple<string, int>> mapItemLines = MainTimelineText.Select((l, i) => new Tuple<string, int>(l, i)).Where(l => l.Item1.Contains("mapItem", StringComparison.OrdinalIgnoreCase) || l.Item1.Contains("itemdrop", StringComparison.OrdinalIgnoreCase));
                 foreach ((string mapItemLine, int index) in mapItemLines)
@@ -276,7 +277,7 @@ public partial class ScriptMap : IScriptMap
                         AddMapItem(int.Parse(mapItem.RemoveLetters()), int.Parse(questId.Split("isquestinprogress")[1].Split(')')[0].RemoveLetters()), FilePath, LastMap);
                     }
                 }
-                Directory.Delete($@"{_cachePath}\tmp\", true);
+                Directory.Delete(tmpPath, true);
 
                 void AddMapItem(int mapItem, int questid, string mapFilePath, string mapName)
                 {
@@ -293,7 +294,7 @@ public partial class ScriptMap : IScriptMap
                         _dialogService.ShowMessageBox("Could not find one or more files to read.", "Get Map Item");
                         break;
                     case PathTooLongException:
-                        _dialogService.ShowMessageBox($"The path for the file is too long.\r\n{_cachePath}\\tmp\\scripts\\*_fla\\MainTimeline.as", "Get Map Item");
+                        _dialogService.ShowMessageBox($"The path for the file is too long.\r\n{Path.Combine(_cachePath, "tmp", "scripts", "*_fla", "MainTimeline.as")}", "Get Map Item");
                         break;
                     case UnauthorizedAccessException:
                         _dialogService.ShowMessageBox("The program don't have permission to access the file", "Get Map Item");
@@ -321,13 +322,17 @@ public partial class ScriptMap : IScriptMap
                 await File.WriteAllBytesAsync(Path.Combine(_cachePath, fileName), fileBytes);
             }).Wait();
             Trace.WriteLine($"Download of \"{fileName}\" took {sw.Elapsed:s\\.ff}s");
-            return File.Exists($"{_cachePath}\\{fileName}");
+            return File.Exists(Path.Combine(_cachePath, fileName));
         }
 
         bool DecompileSWF(string fileName)
         {
             sw.Restart();
             fileName = fileName.EndsWith(".swf") ? fileName : fileName + ".swf";
+            string tmpDir = Path.Combine(_cachePath, "tmp");
+            string swfFile = Path.Combine(_cachePath, fileName);
+            string ffdecDir = Path.Combine(AppContext.BaseDirectory, "FFDec");
+            bool isWin = OperatingSystem.IsWindows();
             Process decompile = new()
             {
                 StartInfo = new ProcessStartInfo
@@ -335,9 +340,11 @@ public partial class ScriptMap : IScriptMap
                     CreateNoWindow = true,
                     UseShellExecute = false,
                     RedirectStandardError = true,
-                    FileName = "cmd.exe",
-                    WorkingDirectory = Path.Combine(AppContext.BaseDirectory, "FFDec"),
-                    Arguments = $"/c ffdec.bat -export script \"{_cachePath}\\tmp\" \"{_cachePath}\\{fileName}\""
+                    FileName = isWin ? "cmd.exe" : "/bin/sh",
+                    WorkingDirectory = ffdecDir,
+                    Arguments = isWin
+                        ? $"/c ffdec.bat -export script \"{tmpDir}\" \"{swfFile}\""
+                        : $"\"{Path.Combine(ffdecDir, "ffdec.sh")}\" -export script \"{tmpDir}\" \"{swfFile}\""
                 }
             };
             decompile.Start();
@@ -351,7 +358,7 @@ public partial class ScriptMap : IScriptMap
             }
             else
                 Trace.WriteLine($"Decompilation of \"{fileName}\" took {sw.Elapsed:s\\.ff}s");
-            return Directory.Exists($"{_cachePath}\\tmp");
+            return Directory.Exists(tmpDir);
         }
     }
 

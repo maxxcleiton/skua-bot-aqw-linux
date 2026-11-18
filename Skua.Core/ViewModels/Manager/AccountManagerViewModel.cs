@@ -41,7 +41,7 @@ public sealed partial class AccountManagerViewModel : BotControlViewModelBase
         _syncThemes = _settingsService.Get("syncTheme", false);
     }
 
-    private readonly string _exePath = Path.Combine(AppContext.BaseDirectory, "Skua.exe");
+    private readonly string _exePath = Path.Combine(AppContext.BaseDirectory, OperatingSystem.IsWindows() ? "Skua.exe" : "Skua");
     private readonly ISettingsService _settingsService;
     private readonly IDialogService _dialogService;
     private readonly IFileDialogService _fileService;

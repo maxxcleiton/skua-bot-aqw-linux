@@ -68,12 +68,13 @@ public partial class CoreBotsViewModel : BotControlViewModelBase
             if (tab.Content is IManageCBOptions cbo)
                 cbo.Save(bob);
         }
-        File.WriteAllText(ClientFileSources.SkuaOptionsDIR + $@"\CBO_Storage({_player.Username}).txt", bob.ToString());
+        string cboPath = Path.Combine(ClientFileSources.SkuaOptionsDIR, $"CBO_Storage({_player.Username}).txt");
+        File.WriteAllText(cboPath, bob.ToString());
         if (showDialog)
         {
-            _dialogService.ShowMessageBox($@"Saved to \options\CBO_Storage({_player.Username}).txt", "Save Successful!");
+            _dialogService.ShowMessageBox($"Saved to options/CBO_Storage({_player.Username}).txt", "Save Successful!");
         }
-        _readValues[_player.Username] = ReadValues(File.ReadAllLines(ClientFileSources.SkuaOptionsDIR + $@"\CBO_Storage({_player.Username}).txt"));
+        _readValues[_player.Username] = ReadValues(File.ReadAllLines(cboPath));
     }
 
     [RelayCommand]
@@ -93,10 +94,11 @@ public partial class CoreBotsViewModel : BotControlViewModelBase
             return;
         }
 
-        if (!File.Exists(ClientFileSources.SkuaOptionsDIR + $@"\CBO_Storage({_player.Username}).txt"))
+        string cboPath = Path.Combine(ClientFileSources.SkuaOptionsDIR, $"CBO_Storage({_player.Username}).txt");
+        if (!File.Exists(cboPath))
             return;
 
-        Dictionary<string, string> optionsDict = ReadValues(File.ReadAllLines(ClientFileSources.SkuaOptionsDIR + $@"\CBO_Storage({_player.Username}).txt"));
+        Dictionary<string, string> optionsDict = ReadValues(File.ReadAllLines(cboPath));
 
         SetValues(optionsDict);
 

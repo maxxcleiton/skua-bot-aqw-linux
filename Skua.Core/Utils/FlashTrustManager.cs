@@ -2,9 +2,13 @@ namespace Skua.Core.Utils;
 
 public static class FlashTrustManager
 {
-    private static readonly string TrustFolderPath = Path.Combine(
-        Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
-        "Macromedia", "Flash Player", "#Security", "FlashPlayerTrust");
+    private static readonly string TrustFolderPath = OperatingSystem.IsWindows()
+        ? Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
+            "Macromedia", "Flash Player", "#Security", "FlashPlayerTrust")
+        : Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
+            ".macromedia", "Flash_Player", "#Security", "FlashPlayerTrust");
 
     private static readonly string TrustFileName = "Skua.cfg";
 
