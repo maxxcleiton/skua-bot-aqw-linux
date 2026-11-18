@@ -223,21 +223,25 @@ public class X11FlashHost : NativeControlHost
             IntPtr topLevel = FindWindowByPid(_display, root, pidAtom, (ulong)_targetPid, 0);
             if (topLevel != IntPtr.Zero)
             {
+                IntPtr canvasChild = FindCanvasChild(_display, topLevel);
+                if (canvasChild == IntPtr.Zero)
+                    return;
+
                 _flashTopLevelXid = topLevel;
-                _embeddedFlashXid = topLevel;
+                _embeddedFlashXid = canvasChild;
                 _searchTimer?.Stop();
 
                 uint w = (uint)Math.Max(100, Bounds.Width);
                 uint h = (uint)Math.Max(100, Bounds.Height);
 
-                XUnmapWindow(_display, _embeddedFlashXid);
-                XSync(_display, false);
-
+                // Keep topLevel mapped and sized to (w, h + 56) so GTK2 allocates (w, h) to the Flash stage,
+                // and set override_redirect = 1 + move topLevel offscreen so the empty GTK shell is invisible.
                 XSetWindowAttributes swa = new() { override_redirect = 1 };
-                XChangeWindowAttributes(_display, _embeddedFlashXid, CWOverrideRedirect, ref swa);
+                XChangeWindowAttributes(_display, _flashTopLevelXid, CWOverrideRedirect, ref swa);
+                XMoveResizeWindow(_display, _flashTopLevelXid, -4000, -4000, w, h + (uint)FlashChromeTopOffset);
 
-                XReparentWindow(_display, _embeddedFlashXid, _containerXid, 0, -FlashChromeTopOffset);
-                XMoveResizeWindow(_display, _embeddedFlashXid, 0, -FlashChromeTopOffset, w, h + (uint)FlashChromeTopOffset);
+                XReparentWindow(_display, _embeddedFlashXid, _containerXid, 0, 0);
+                XMoveResizeWindow(_display, _embeddedFlashXid, 0, 0, w, h);
                 XMapRaised(_display, _embeddedFlashXid);
                 XSync(_display, false);
             }
@@ -247,21 +251,19 @@ public class X11FlashHost : NativeControlHost
 
     public void UndockFlashWindow()
     {
-        if (_display == IntPtr.Zero || _embeddedFlashXid == IntPtr.Zero)
+        if (_display == IntPtr.Zero || _embeddedFlashXid == IntPtr.Zero || _flashTopLevelXid == IntPtr.Zero)
             return;
 
         try
         {
-            IntPtr root = XDefaultRootWindow(_display);
-            XUnmapWindow(_display, _embeddedFlashXid);
-            XSync(_display, false);
+            XReparentWindow(_display, _embeddedFlashXid, _flashTopLevelXid, 0, FlashChromeTopOffset);
+            XMoveResizeWindow(_display, _embeddedFlashXid, 0, FlashChromeTopOffset, 958, 550);
+            XMapRaised(_display, _embeddedFlashXid);
 
             XSetWindowAttributes swa = new() { override_redirect = 0 };
-            XChangeWindowAttributes(_display, _embeddedFlashXid, CWOverrideRedirect, ref swa);
-
-            XReparentWindow(_display, _embeddedFlashXid, root, 100, 100);
-            XMoveResizeWindow(_display, _embeddedFlashXid, 100, 100, 960, 606);
-            XMapRaised(_display, _embeddedFlashXid);
+            XChangeWindowAttributes(_display, _flashTopLevelXid, CWOverrideRedirect, ref swa);
+            XMoveResizeWindow(_display, _flashTopLevelXid, 100, 100, 958, 550 + (uint)FlashChromeTopOffset);
+            XMapRaised(_display, _flashTopLevelXid);
             XSync(_display, false);
             _embeddedFlashXid = IntPtr.Zero;
         }
@@ -289,9 +291,10 @@ public class X11FlashHost : NativeControlHost
         try
         {
             XMoveResizeWindow(_display, _containerXid, 0, 0, w, h);
-            if (_embeddedFlashXid != IntPtr.Zero)
+            if (_flashTopLevelXid != IntPtr.Zero && _embeddedFlashXid != IntPtr.Zero)
             {
-                XMoveResizeWindow(_display, _embeddedFlashXid, 0, -FlashChromeTopOffset, w, h + (uint)FlashChromeTopOffset);
+                XMoveResizeWindow(_display, _flashTopLevelXid, -4000, -4000, w, h + (uint)FlashChromeTopOffset);
+                XMoveResizeWindow(_display, _embeddedFlashXid, 0, 0, w, h);
             }
             XFlush(_display);
         }

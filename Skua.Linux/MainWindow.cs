@@ -116,8 +116,6 @@ public class MainWindow : Window
             Dispatcher.UIThread.Post(() =>
             {
                 _flashStatusBadge.Text = $"Flash PID {pid} (Connecting...)";
-                if (_isDocked)
-                    _flashHost.AttachFlashProcess(pid);
             });
         };
 
@@ -133,6 +131,10 @@ public class MainWindow : Window
             {
                 _flashStatusBadge.Text = function == "loaded" ? "AQW Loaded (Connected)" : "Loading AQW Client...";
                 _flashStatusBadge.Foreground = new SolidColorBrush(Color.Parse(function == "loaded" ? "#A6E3A1" : "#89B4FA"));
+                if (_isDocked && _flashUtil.FlashProcessId is int pid)
+                {
+                    _flashHost.AttachFlashProcess(pid);
+                }
             });
         }
     }
