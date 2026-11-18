@@ -32,7 +32,19 @@ public sealed partial class AccountManagerViewModel : BotControlViewModelBase
         _settingsService = settingsService;
         _dialogService = dialogService;
         _fileService = fileService;
-        ServerList = new();
+        ServerList = new()
+        {
+            new Server { Name = "Artix", IP = "game.aq.com", Port = 5588, Online = true },
+            new Server { Name = "Twilly", IP = "game.aq.com", Port = 5588, Online = true },
+            new Server { Name = "Galanoth", IP = "game.aq.com", Port = 5588, Online = true },
+            new Server { Name = "Safiria", IP = "game.aq.com", Port = 5588, Online = true },
+            new Server { Name = "Espada", IP = "game.aq.com", Port = 5588, Online = true },
+            new Server { Name = "Gravelyn", IP = "game.aq.com", Port = 5588, Online = true },
+            new Server { Name = "Sepulchure", IP = "game.aq.com", Port = 5588, Online = true },
+            new Server { Name = "Yori", IP = "game.aq.com", Port = 5588, Online = true }
+        };
+        string savedServer = _settingsService.Get<string>("LastServer");
+        SelectedServer = ServerList.FirstOrDefault(s => s.Name == savedServer) ?? ServerList[0];
         Task.Run(async () => await _GetServers());
         Accounts = new();
         _GetSavedAccounts();
@@ -672,7 +684,7 @@ public sealed partial class AccountManagerViewModel : BotControlViewModelBase
             // Measure pings before displaying servers
             await _MeasureServerPings(_cachedServers);
 
-            ServerList.AddRange(_cachedServers);
+            ServerList.ReplaceRange(_cachedServers);
 
             string lastServer = _settingsService.Get<string>("LastServer");
             Server? serverToSelect = null;

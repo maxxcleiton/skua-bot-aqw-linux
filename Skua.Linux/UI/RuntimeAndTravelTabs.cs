@@ -10,6 +10,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Skua.Core.Interfaces;
 using Skua.Core.Models.Items;
 using Skua.Core.ViewModels;
+using Skua.Linux.Services;
 
 namespace Skua.Linux.UI;
 
@@ -207,7 +208,10 @@ internal static class RuntimeAndTravelTabs
             }
         }));
 
-        // 4. Registered Quests
+        // 4. Auto Combat Potions
+        panel.Children.Add(BuildCombatPotionsCard(services));
+
+        // 5. Registered Quests
         RegisteredQuestsViewModel questsVm = runtimeVm.RegisteredQuestsViewModel;
 
         TextBox questIdBox = new() { Watermark = "Quest IDs (e.g. 123, 456)", Width = 180, Margin = new Thickness(0, 0, 4, 0) };
@@ -259,6 +263,57 @@ internal static class RuntimeAndTravelTabs
         }));
 
         return new ScrollViewer { Content = panel };
+    }
+
+    private static Control BuildCombatPotionsCard(IServiceProvider services)
+    {
+        AutoCombatPotionService potionService = services.GetRequiredService<AutoCombatPotionService>();
+
+        Button toggleBtn = UiTheme.StyledButton(potionService.IsRunning ? "Stop Potions" : "Start Potions", potionService.IsRunning ? "danger" : "success");
+        toggleBtn.Click += (_, _) =>
+        {
+            potionService.Toggle();
+        };
+
+        potionService.StateChanged += running =>
+        {
+            Dispatcher.UIThread.Post(() =>
+            {
+                toggleBtn.Content = running ? "Stop Potions" : "Start Potions";
+                toggleBtn.Classes.Set("danger", running);
+                toggleBtn.Classes.Set("success", !running);
+            });
+        };
+
+        CheckBox bankChk = new() { Content = "Pull Bank", IsChecked = potionService.AutoPullFromBank, Margin = new Thickness(4, 0) };
+        bankChk.IsCheckedChanged += (_, _) => potionService.AutoPullFromBank = bankChk.IsChecked == true;
+
+        CheckBox combatOnlyChk = new() { Content = "Combat Only", IsChecked = potionService.OnlyInCombat, Margin = new Thickness(4, 0) };
+        combatOnlyChk.IsCheckedChanged += (_, _) => potionService.OnlyInCombat = combatOnlyChk.IsChecked == true;
+
+        WrapPanel checkboxes = new();
+        foreach (PotionEntry potion in potionService.Potions)
+        {
+            CheckBox chk = new()
+            {
+                Content = $"{potion.DisplayName} ({potion.StatBonus})",
+                Margin = new Thickness(4, 2),
+                IsChecked = potion.Enabled
+            };
+            chk.IsCheckedChanged += (_, _) => potion.Enabled = chk.IsChecked == true;
+            checkboxes.Children.Add(chk);
+        }
+
+        return UiTheme.Card(new StackPanel
+        {
+            Spacing = 6,
+            Children =
+            {
+                UiTheme.SectionTitle("Auto Combat Potions (Tonics / Elixirs)", UiTheme.Mauve),
+                checkboxes,
+                new WrapPanel { Children = { toggleBtn, bankChk, combatOnlyChk } }
+            }
+        });
     }
 
     public static Control BuildAutoAndMapTab(IServiceProvider services)

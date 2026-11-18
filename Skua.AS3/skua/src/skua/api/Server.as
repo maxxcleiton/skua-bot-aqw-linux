@@ -36,12 +36,23 @@ public class Server {
         connectionServerTimer.start();
 
         function connectingServer(e:Event):void {
+            var g:* = (Main.instance != null) ? Main.instance.game : null;
+            if (g != null && g.objLogin != null) {
+                objLogin = g.objLogin;
+            } else {
+                try {
+                    var s:String = Main.getGameObject("objLogin");
+                    if (s && s != "null" && s != "undefined") {
+                        objLogin = JSON.parse(s);
+                    }
+                } catch (err:Error) {}
+            }
+
             if (objLogin != null) {
                 connectServer(serverData, objLogin);
                 connectionServerTimer.stop();
                 connectionServerTimer.removeEventListener(TimerEvent.TIMER, connectingServer);
             }
-            objLogin = JSON.parse(Main.getGameObjectS("objLogin"));
         }
 
         return true.toString();

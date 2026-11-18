@@ -1,4 +1,5 @@
 using System.Collections.Specialized;
+using System.Diagnostics;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.ApplicationLifetimes;
@@ -36,6 +37,7 @@ public static class ConfigureLinuxServices
         services.AddSingleton<IThemeService, LinuxThemeService>();
         services.AddSingleton<ISoundService, LinuxSoundService>();
         services.AddSingleton<BackgroundThemeService>();
+        services.AddSingleton<AutoCombatPotionService>();
 
         return services;
     }
@@ -941,11 +943,49 @@ public sealed class SkuaLinuxStartupHandler : IDisposable
         if (function == "loaded")
         {
             _bot.Flash.FlashCall -= Login;
-            Task.Factory.StartNew(() =>
+            _ = Task.Run(async () =>
             {
-                _bot.Servers.Relogin(_result.Value.Server);
-                if (!string.IsNullOrEmpty(_result.Value.Script))
-                    StrongReferenceMessenger.Default.Send<StartScriptMessage, int>(new(_result.Value.Script), (int)MessageChannels.ScriptStatus);
+                try
+                {
+                    string targetServer = !string.IsNullOrEmpty(_result.Value.Server) ? _result.Value.Server : "Twilly";
+                    Trace.WriteLine($"[StartupHandler] Flash loaded. Preparing auto-login for '{_result.Value.Username}' on '{targetServer}'...");
+
+                    // Wait 2 seconds for Flash login screen/timeline to fully settle
+                    await Task.Delay(2000);
+
+                    // Set login credentials
+                    _bot.Servers.SetLoginInfo(_result.Value.Username!, _result.Value.Password!);
+
+                    // Pre-fill fields on AQW login screen UI if elements exist
+                    try
+                    {
+                        _bot.Flash.SetGameObject("mcLogin.txtUserName.text", _result.Value.Username!);
+                        _bot.Flash.SetGameObject("mcLogin.txtPassword.text", _result.Value.Password!);
+                    }
+                    catch { }
+
+                    // Perform resilient login and join server
+                    using CancellationTokenSource cts = new(TimeSpan.FromSeconds(60));
+                    bool connected = await _bot.Servers.EnsureRelogin(targetServer, cts.Token);
+                    Trace.WriteLine($"[StartupHandler] EnsureRelogin finished with: {connected}");
+
+                    if (!connected && !_bot.Player.Playing)
+                    {
+                        Trace.WriteLine($"[StartupHandler] Retrying login via Relogin({targetServer})...");
+                        _bot.Servers.Relogin(targetServer);
+                    }
+
+                    if (!string.IsNullOrEmpty(_result.Value.Script))
+                    {
+                        await Task.Delay(3000);
+                        StrongReferenceMessenger.Default.Send<StartScriptMessage, int>(
+                            new(_result.Value.Script), (int)MessageChannels.ScriptStatus);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Trace.WriteLine($"[StartupHandler] Auto-login error: {ex}");
+                }
             });
         }
     }
