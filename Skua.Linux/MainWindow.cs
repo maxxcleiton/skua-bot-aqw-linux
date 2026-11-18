@@ -123,6 +123,8 @@ public class MainWindow : Window
         Opened += (_, _) => _bot.Flash.InitializeFlash();
     }
 
+    private bool _flashAttached;
+
     private void OnFlashCall(string function, params object[] args)
     {
         if (function is "requestLoadGame" or "loaded")
@@ -131,8 +133,11 @@ public class MainWindow : Window
             {
                 _flashStatusBadge.Text = function == "loaded" ? "AQW Loaded (Connected)" : "Loading AQW Client...";
                 _flashStatusBadge.Foreground = new SolidColorBrush(Color.Parse(function == "loaded" ? "#A6E3A1" : "#89B4FA"));
-                if (_isDocked && _flashUtil.FlashProcessId is int pid)
+                // Attach on first FlashCall that fires (requestLoadGame or loaded).
+                // The window must already be mapped for us to find it.
+                if (_isDocked && !_flashAttached && _flashUtil.FlashProcessId is int pid)
                 {
+                    _flashAttached = true;
                     _flashHost.AttachFlashProcess(pid);
                 }
             });
@@ -199,7 +204,11 @@ public class MainWindow : Window
             Content = "Reload Flash",
             Margin = new Thickness(2)
         };
-        reloadFlashBtn.Click += (_, _) => _bot.Flash.InitializeFlash();
+        reloadFlashBtn.Click += (_, _) =>
+        {
+            _flashAttached = false;
+            _bot.Flash.InitializeFlash();
+        };
 
         Button dockToggleBtn = new()
         {
@@ -212,11 +221,13 @@ public class MainWindow : Window
             {
                 _flashHost.UndockFlashWindow();
                 _isDocked = false;
+                _flashAttached = false;
             }
             else
             {
                 _flashHost.RedockFlashWindow();
                 _isDocked = true;
+                _flashAttached = true;
             }
         };
 

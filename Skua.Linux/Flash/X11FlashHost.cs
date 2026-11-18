@@ -6,14 +6,28 @@ using Avalonia.Threading;
 
 namespace Skua.Linux.Flash;
 
+/// <summary>
+/// Embeds the Adobe Flash Player window inside an Avalonia NativeControlHost.
+/// 
+/// Strategy: Reparent the entire GTK2 top-level window (with override_redirect=1
+/// to prevent WM interference) into our X11 container. Position it with a negative
+/// Y offset to crop the GTK menu bar. This preserves GTK's event handling so
+/// mouse clicks work normally.
+/// </summary>
 public class X11FlashHost : NativeControlHost
 {
     private IntPtr _display;
     private IntPtr _containerXid;
-    private IntPtr _embeddedFlashXid;
     private IntPtr _flashTopLevelXid;
     private int _targetPid;
+    private bool _isEmbedded;
     private DispatcherTimer? _searchTimer;
+    private DispatcherTimer? _resizeTimer;
+
+    // The GTK2 chrome height (menu bar + URL bar) of flashplayer
+    private const int GtkChromeHeight = 56;
+
+    #region X11 P/Invoke
 
     [DllImport("libX11.so.6")]
     private static extern IntPtr XOpenDisplay(IntPtr display);
@@ -36,10 +50,16 @@ public class X11FlashHost : NativeControlHost
     private static extern int XMapWindow(IntPtr display, IntPtr window);
 
     [DllImport("libX11.so.6")]
+    private static extern int XUnmapWindow(IntPtr display, IntPtr window);
+
+    [DllImport("libX11.so.6")]
     private static extern int XReparentWindow(IntPtr display, IntPtr window, IntPtr parent, int x, int y);
 
     [DllImport("libX11.so.6")]
     private static extern int XMoveResizeWindow(IntPtr display, IntPtr window, int x, int y, uint width, uint height);
+
+    [DllImport("libX11.so.6")]
+    private static extern int XResizeWindow(IntPtr display, IntPtr window, uint width, uint height);
 
     [DllImport("libX11.so.6")]
     private static extern int XFlush(IntPtr display);
@@ -60,6 +80,31 @@ public class X11FlashHost : NativeControlHost
     private static extern int XQueryTree(
         IntPtr display, IntPtr window, out IntPtr rootReturn, out IntPtr parentReturn,
         out IntPtr childrenReturn, out uint nchildrenReturn);
+
+    [DllImport("libX11.so.6")]
+    private static extern int XFree(IntPtr data);
+
+    [DllImport("libX11.so.6")]
+    private static extern int XMapRaised(IntPtr display, IntPtr window);
+
+    [DllImport("libX11.so.6")]
+    private static extern int XGetWindowAttributes(IntPtr display, IntPtr window, out XWindowAttributes windowAttributesReturn);
+
+    [DllImport("libX11.so.6")]
+    private static extern int XChangeWindowAttributes(
+        IntPtr display, IntPtr window, ulong valuemask, ref XSetWindowAttributes attributes);
+
+    [DllImport("libX11.so.6")]
+    private static extern int XConfigureWindow(IntPtr display, IntPtr window, uint valueMask, ref XWindowChanges changes);
+
+    [DllImport("libX11.so.6")]
+    private static extern int XSelectInput(IntPtr display, IntPtr window, long eventMask);
+
+    [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
+    private delegate int XErrorHandlerDelegate(IntPtr display, IntPtr errorEvent);
+
+    [DllImport("libX11.so.6")]
+    private static extern IntPtr XSetErrorHandler(XErrorHandlerDelegate handler);
 
     [StructLayout(LayoutKind.Sequential)]
     private struct XWindowAttributes
@@ -107,26 +152,27 @@ public class X11FlashHost : NativeControlHost
         public IntPtr cursor;
     }
 
+    [StructLayout(LayoutKind.Sequential)]
+    private struct XWindowChanges
+    {
+        public int x, y;
+        public int width, height;
+        public int border_width;
+        public IntPtr sibling;
+        public int stack_mode;
+    }
+
     private const ulong CWOverrideRedirect = 1UL << 9;
+    private const uint CWX = 1 << 0;
+    private const uint CWY = 1 << 1;
+    private const uint CWWidth = 1 << 2;
+    private const uint CWHeight = 1 << 3;
 
-    [DllImport("libX11.so.6")]
-    private static extern int XChangeWindowAttributes(
-        IntPtr display, IntPtr window, ulong valuemask, ref XSetWindowAttributes attributes);
+    // Event masks
+    private const long SubstructureNotifyMask = 1L << 19;
+    private const long StructureNotifyMask = 1L << 17;
 
-    [DllImport("libX11.so.6")]
-    private static extern int XUnmapWindow(IntPtr display, IntPtr window);
-
-    [DllImport("libX11.so.6")]
-    private static extern int XMapRaised(IntPtr display, IntPtr window);
-
-    [DllImport("libX11.so.6")]
-    private static extern int XGetWindowAttributes(IntPtr display, IntPtr window, out XWindowAttributes windowAttributesReturn);
-
-    [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
-    private delegate int XErrorHandlerDelegate(IntPtr display, IntPtr errorEvent);
-
-    [DllImport("libX11.so.6")]
-    private static extern IntPtr XSetErrorHandler(XErrorHandlerDelegate handler);
+    #endregion
 
     private static readonly XErrorHandlerDelegate IgnoreXError = (_, _) => 0;
     private static bool _errorHandlerInstalled;
@@ -144,13 +190,18 @@ public class X11FlashHost : NativeControlHost
             _display = XOpenDisplay(IntPtr.Zero);
             if (_display != IntPtr.Zero && parent.Handle != IntPtr.Zero)
             {
+                uint w = (uint)Math.Max(100, Bounds.Width);
+                uint h = (uint)Math.Max(100, Bounds.Height);
+
+                // Create a clipping container window inside the Avalonia-provided parent
                 _containerXid = XCreateSimpleWindow(
-                    _display, parent.Handle, 0, 0,
-                    (uint)Math.Max(100, Bounds.Width),
-                    (uint)Math.Max(100, Bounds.Height),
-                    0, 0, 0x000000);
+                    _display, parent.Handle, 0, 0, w, h, 0, 0, 0x000000);
+
+                // Enable substructure notify so we get ConfigureNotify from children
+                XSelectInput(_display, _containerXid, SubstructureNotifyMask | StructureNotifyMask);
                 XMapWindow(_display, _containerXid);
                 XFlush(_display);
+
                 return new PlatformHandle(_containerXid, "XID");
             }
         }
@@ -165,11 +216,21 @@ public class X11FlashHost : NativeControlHost
     {
         _searchTimer?.Stop();
         _searchTimer = null;
+        _resizeTimer?.Stop();
+        _resizeTimer = null;
 
         try
         {
             if (_display != IntPtr.Zero)
             {
+                // If we embedded the flash window, try to reparent back to root before destroying
+                if (_flashTopLevelXid != IntPtr.Zero && _isEmbedded)
+                {
+                    IntPtr root = XDefaultRootWindow(_display);
+                    XReparentWindow(_display, _flashTopLevelXid, root, 0, 0);
+                    XSync(_display, false);
+                }
+
                 if (_containerXid != IntPtr.Zero)
                 {
                     XDestroyWindow(_display, _containerXid);
@@ -192,24 +253,22 @@ public class X11FlashHost : NativeControlHost
         ResizeEmbeddedWindow();
     }
 
-    private const int FlashChromeTopOffset = 56;
-
     public void AttachFlashProcess(int pid)
     {
         _targetPid = pid;
-        _embeddedFlashXid = IntPtr.Zero;
         _flashTopLevelXid = IntPtr.Zero;
+        _isEmbedded = false;
 
         _searchTimer?.Stop();
         int attempts = 0;
         _searchTimer = new DispatcherTimer
         {
-            Interval = TimeSpan.FromMilliseconds(200)
+            Interval = TimeSpan.FromMilliseconds(300)
         };
         _searchTimer.Tick += (_, _) =>
         {
             attempts++;
-            if (attempts > 40 || _display == IntPtr.Zero || _containerXid == IntPtr.Zero)
+            if (attempts > 50 || _display == IntPtr.Zero || _containerXid == IntPtr.Zero)
             {
                 _searchTimer?.Stop();
                 return;
@@ -221,51 +280,104 @@ public class X11FlashHost : NativeControlHost
                 return;
 
             IntPtr topLevel = FindWindowByPid(_display, root, pidAtom, (ulong)_targetPid, 0);
-            if (topLevel != IntPtr.Zero)
-            {
-                IntPtr canvasChild = FindCanvasChild(_display, topLevel);
-                if (canvasChild == IntPtr.Zero)
-                    return;
+            if (topLevel == IntPtr.Zero)
+                return;
 
-                _flashTopLevelXid = topLevel;
-                _embeddedFlashXid = canvasChild;
-                _searchTimer?.Stop();
+            // Verify the window is big enough (the actual flash player window, not the leader)
+            if (XGetWindowAttributes(_display, topLevel, out XWindowAttributes attrs) == 0 ||
+                attrs.width < 200 || attrs.height < 200)
+                return;
 
-                uint w = (uint)Math.Max(100, Bounds.Width);
-                uint h = (uint)Math.Max(100, Bounds.Height);
+            _flashTopLevelXid = topLevel;
+            _searchTimer?.Stop();
 
-                // Keep topLevel mapped and sized to (w, h + 56) so GTK2 allocates (w, h) to the Flash stage,
-                // and set override_redirect = 1 + move topLevel offscreen so the empty GTK shell is invisible.
-                XSetWindowAttributes swa = new() { override_redirect = 1 };
-                XChangeWindowAttributes(_display, _flashTopLevelXid, CWOverrideRedirect, ref swa);
-                XMoveResizeWindow(_display, _flashTopLevelXid, -4000, -4000, w, h + (uint)FlashChromeTopOffset);
-
-                XReparentWindow(_display, _embeddedFlashXid, _containerXid, 0, 0);
-                XMoveResizeWindow(_display, _embeddedFlashXid, 0, 0, w, h);
-                XMapRaised(_display, _embeddedFlashXid);
-                XSync(_display, false);
-            }
+            EmbedWindow();
         };
         _searchTimer.Start();
     }
 
+    private void EmbedWindow()
+    {
+        if (_display == IntPtr.Zero || _containerXid == IntPtr.Zero || _flashTopLevelXid == IntPtr.Zero)
+            return;
+
+        uint containerW = (uint)Math.Max(100, Bounds.Width);
+        uint containerH = (uint)Math.Max(100, Bounds.Height);
+
+        // Step 1: Set override_redirect=1 on the flash top-level BEFORE reparenting.
+        // This prevents the window manager from intercepting the reparent and
+        // setting WM_STATE to Withdrawn (which freezes Flash rendering).
+        XSetWindowAttributes swa = new() { override_redirect = 1 };
+        XChangeWindowAttributes(_display, _flashTopLevelXid, CWOverrideRedirect, ref swa);
+        XSync(_display, false);
+
+        // Step 2: Unmap briefly to ensure clean reparent
+        XUnmapWindow(_display, _flashTopLevelXid);
+        XSync(_display, false);
+
+        // Step 3: Reparent the entire GTK2 top-level window into our container.
+        // Position with Y = -GtkChromeHeight to crop the menu/URL bar.
+        // The window must be sized to (containerW, containerH + GtkChromeHeight) so that
+        // GTK2 allocates (containerW, containerH) to the Flash stage child.
+        XReparentWindow(_display, _flashTopLevelXid, _containerXid, 0, -GtkChromeHeight);
+        XSync(_display, false);
+
+        // Step 4: Resize the top-level to fill our container + extra for the hidden chrome
+        XMoveResizeWindow(_display, _flashTopLevelXid, 0, -GtkChromeHeight,
+            containerW, containerH + (uint)GtkChromeHeight);
+        XSync(_display, false);
+
+        // Step 5: Map the window back
+        XMapWindow(_display, _flashTopLevelXid);
+        XSync(_display, false);
+
+        _isEmbedded = true;
+
+        // Step 6: Start a brief resize enforcement timer.
+        // GTK2 may try to resize itself after being reparented; we override that.
+        int enforceCount = 0;
+        _resizeTimer?.Stop();
+        _resizeTimer = new DispatcherTimer
+        {
+            Interval = TimeSpan.FromMilliseconds(100)
+        };
+        _resizeTimer.Tick += (_, _) =>
+        {
+            enforceCount++;
+            if (enforceCount > 20)
+            {
+                _resizeTimer?.Stop();
+                return;
+            }
+            ResizeEmbeddedWindow();
+        };
+        _resizeTimer.Start();
+    }
+
     public void UndockFlashWindow()
     {
-        if (_display == IntPtr.Zero || _embeddedFlashXid == IntPtr.Zero || _flashTopLevelXid == IntPtr.Zero)
+        if (_display == IntPtr.Zero || _flashTopLevelXid == IntPtr.Zero || !_isEmbedded)
             return;
 
         try
         {
-            XReparentWindow(_display, _embeddedFlashXid, _flashTopLevelXid, 0, FlashChromeTopOffset);
-            XMoveResizeWindow(_display, _embeddedFlashXid, 0, FlashChromeTopOffset, 958, 550);
-            XMapRaised(_display, _embeddedFlashXid);
+            IntPtr root = XDefaultRootWindow(_display);
+
+            // Unmap, reparent back to root, remove override_redirect, map
+            XUnmapWindow(_display, _flashTopLevelXid);
+            XSync(_display, false);
+
+            XReparentWindow(_display, _flashTopLevelXid, root, 100, 100);
+            XSync(_display, false);
 
             XSetWindowAttributes swa = new() { override_redirect = 0 };
             XChangeWindowAttributes(_display, _flashTopLevelXid, CWOverrideRedirect, ref swa);
-            XMoveResizeWindow(_display, _flashTopLevelXid, 100, 100, 958, 550 + (uint)FlashChromeTopOffset);
+
+            XMoveResizeWindow(_display, _flashTopLevelXid, 100, 100, 960, 600);
             XMapRaised(_display, _flashTopLevelXid);
             XSync(_display, false);
-            _embeddedFlashXid = IntPtr.Zero;
+
+            _isEmbedded = false;
         }
         catch
         {
@@ -274,7 +386,11 @@ public class X11FlashHost : NativeControlHost
 
     public void RedockFlashWindow()
     {
-        if (_targetPid > 0)
+        if (_flashTopLevelXid != IntPtr.Zero && !_isEmbedded)
+        {
+            EmbedWindow();
+        }
+        else if (_targetPid > 0)
         {
             AttachFlashProcess(_targetPid);
         }
@@ -290,11 +406,15 @@ public class X11FlashHost : NativeControlHost
 
         try
         {
-            XMoveResizeWindow(_display, _containerXid, 0, 0, w, h);
-            if (_flashTopLevelXid != IntPtr.Zero && _embeddedFlashXid != IntPtr.Zero)
+            XResizeWindow(_display, _containerXid, w, h);
+
+            if (_flashTopLevelXid != IntPtr.Zero && _isEmbedded)
             {
-                XMoveResizeWindow(_display, _flashTopLevelXid, -4000, -4000, w, h + (uint)FlashChromeTopOffset);
-                XMoveResizeWindow(_display, _embeddedFlashXid, 0, 0, w, h);
+                // Position the top-level at (0, -GtkChromeHeight) so the menu bar
+                // is cropped above the container's visible area.
+                // Size it to (w, h + GtkChromeHeight) so GTK allocates (w, h) to Flash.
+                XMoveResizeWindow(_display, _flashTopLevelXid, 0, -GtkChromeHeight,
+                    w, h + (uint)GtkChromeHeight);
             }
             XFlush(_display);
         }
@@ -303,36 +423,7 @@ public class X11FlashHost : NativeControlHost
         }
     }
 
-    [DllImport("libX11.so.6")]
-    private static extern int XFree(IntPtr data);
-
-    private static IntPtr FindCanvasChild(IntPtr display, IntPtr topLevel)
-    {
-        if (XQueryTree(display, topLevel, out _, out _, out IntPtr childrenPtr, out uint nChildren) == 0)
-            return IntPtr.Zero;
-
-        if (childrenPtr == IntPtr.Zero || nChildren == 0)
-            return IntPtr.Zero;
-
-        try
-        {
-            for (int i = 0; i < nChildren; i++)
-            {
-                IntPtr child = Marshal.ReadIntPtr(childrenPtr, i * IntPtr.Size);
-                if (XGetWindowAttributes(display, child, out XWindowAttributes attrs) != 0 &&
-                    attrs.width >= 200 && attrs.height >= 200)
-                {
-                    return child;
-                }
-            }
-        }
-        finally
-        {
-            XFree(childrenPtr);
-        }
-
-        return IntPtr.Zero;
-    }
+    #region Window Search
 
     private static IntPtr FindWindowByPid(IntPtr display, IntPtr window, IntPtr pidAtom, ulong targetPid, int depth)
     {
@@ -395,4 +486,6 @@ public class X11FlashHost : NativeControlHost
 
         return 0;
     }
+
+    #endregion
 }
