@@ -11,6 +11,7 @@ public class X11FlashHost : NativeControlHost
     private IntPtr _display;
     private IntPtr _containerXid;
     private IntPtr _embeddedFlashXid;
+    private IntPtr _flashTopLevelXid;
     private int _targetPid;
     private DispatcherTimer? _searchTimer;
 
@@ -184,10 +185,14 @@ public class X11FlashHost : NativeControlHost
             if (pidAtom == IntPtr.Zero)
                 return;
 
-            IntPtr found = FindWindowByPid(_display, root, pidAtom, (ulong)_targetPid, 0);
-            if (found != IntPtr.Zero)
+            IntPtr topLevel = FindWindowByPid(_display, root, pidAtom, (ulong)_targetPid, 0);
+            if (topLevel != IntPtr.Zero)
             {
-                _embeddedFlashXid = found;
+                IntPtr canvasChild = FindCanvasChild(_display, topLevel);
+                IntPtr targetToEmbed = canvasChild != IntPtr.Zero ? canvasChild : topLevel;
+
+                _flashTopLevelXid = topLevel;
+                _embeddedFlashXid = targetToEmbed;
                 _searchTimer?.Stop();
 
                 uint w = (uint)Math.Max(100, Bounds.Width);
@@ -195,6 +200,12 @@ public class X11FlashHost : NativeControlHost
                 XReparentWindow(_display, _embeddedFlashXid, _containerXid, 0, 0);
                 XMapWindow(_display, _embeddedFlashXid);
                 XMoveResizeWindow(_display, _embeddedFlashXid, 0, 0, w, h);
+
+                if (canvasChild != IntPtr.Zero && _flashTopLevelXid != IntPtr.Zero)
+                {
+                    XMoveResizeWindow(_display, _flashTopLevelXid, -2000, -2000, 10, 10);
+                }
+
                 XSync(_display, false);
             }
         };
@@ -208,10 +219,21 @@ public class X11FlashHost : NativeControlHost
 
         try
         {
-            IntPtr root = XDefaultRootWindow(_display);
-            XReparentWindow(_display, _embeddedFlashXid, root, 100, 100);
-            XMapWindow(_display, _embeddedFlashXid);
-            XMoveResizeWindow(_display, _embeddedFlashXid, 100, 100, 960, 550);
+            if (_flashTopLevelXid != IntPtr.Zero && _embeddedFlashXid != _flashTopLevelXid)
+            {
+                XMoveResizeWindow(_display, _flashTopLevelXid, 100, 100, 960, 606);
+                XMapWindow(_display, _flashTopLevelXid);
+                XReparentWindow(_display, _embeddedFlashXid, _flashTopLevelXid, 0, 56);
+                XMapWindow(_display, _embeddedFlashXid);
+                XMoveResizeWindow(_display, _embeddedFlashXid, 0, 56, 960, 550);
+            }
+            else
+            {
+                IntPtr root = XDefaultRootWindow(_display);
+                XReparentWindow(_display, _embeddedFlashXid, root, 100, 100);
+                XMapWindow(_display, _embeddedFlashXid);
+                XMoveResizeWindow(_display, _embeddedFlashXid, 100, 100, 960, 550);
+            }
             XSync(_display, false);
             _embeddedFlashXid = IntPtr.Zero;
         }
@@ -252,6 +274,34 @@ public class X11FlashHost : NativeControlHost
 
     [DllImport("libX11.so.6")]
     private static extern int XFree(IntPtr data);
+
+    private static IntPtr FindCanvasChild(IntPtr display, IntPtr topLevel)
+    {
+        if (XQueryTree(display, topLevel, out _, out _, out IntPtr childrenPtr, out uint nChildren) == 0)
+            return IntPtr.Zero;
+
+        if (childrenPtr == IntPtr.Zero || nChildren == 0)
+            return IntPtr.Zero;
+
+        try
+        {
+            for (int i = 0; i < nChildren; i++)
+            {
+                IntPtr child = Marshal.ReadIntPtr(childrenPtr, i * IntPtr.Size);
+                if (XGetWindowAttributes(display, child, out XWindowAttributes attrs) != 0 &&
+                    attrs.width >= 200 && attrs.height >= 200)
+                {
+                    return child;
+                }
+            }
+        }
+        finally
+        {
+            XFree(childrenPtr);
+        }
+
+        return IntPtr.Zero;
+    }
 
     private static IntPtr FindWindowByPid(IntPtr display, IntPtr window, IntPtr pidAtom, ulong targetPid, int depth)
     {
