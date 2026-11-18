@@ -483,11 +483,11 @@ public class MainWindow : Window
                 new() { Header = "Scripts", Content = BuildScriptsTab() },
                 new() { Header = "Repo", Content = BuildScriptRepoTab() },
                 new() { Header = "Runtime", Content = RuntimeAndTravelTabs.BuildRuntimeTab(_services) },
-                new() { Header = "Grabber", Content = BuildGrabberTab() },
-                new() { Header = "Auto/Map", Content = RuntimeAndTravelTabs.BuildAutoAndMapTab(_services) },
-                new() { Header = "Packets", Content = BuildPacketsTab() },
-                new() { Header = "Options", Content = BuildOptionsTab() },
-                new() { Header = "Dev/Logs", Content = BuildConsoleAndLogsTab() }
+                new() { Header = "Grab", Content = BuildGrabberTab() },
+                new() { Header = "Map", Content = RuntimeAndTravelTabs.BuildAutoAndMapTab(_services) },
+                new() { Header = "Pkts", Content = BuildPacketsTab() },
+                new() { Header = "Opts", Content = BuildOptionsTab() },
+                new() { Header = "Logs", Content = BuildConsoleAndLogsTab() }
             }
         };
     }

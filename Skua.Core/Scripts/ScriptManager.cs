@@ -441,6 +441,26 @@ public partial class ScriptManager : ObservableObject, IScriptManager, IDisposab
         return references;
     }
 
+    private static readonly Regex _windowsVersionCheckRegex = new(@"OperatingSystem\.IsWindowsVersionAtLeast\s*\([^)]*\)", RegexOptions.Compiled);
+    private static readonly Regex _skuaVersionCheckerSigRegex = new(@"(private\s+async\s+Task\s+SkuaVersionCheckerAsync\s*\(\s*\)\s*\{)", RegexOptions.Compiled);
+
+    private static string ApplyLinuxScriptCompat(string source)
+    {
+        if (OperatingSystem.IsWindows() || string.IsNullOrEmpty(source))
+            return source;
+
+        string patched = source;
+        if (patched.Contains("SkuaVersionCheckerAsync", StringComparison.Ordinal))
+        {
+            patched = _skuaVersionCheckerSigRegex.Replace(patched, "$1 if (!OperatingSystem.IsWindows()) return;");
+        }
+        if (patched.Contains("IsWindowsVersionAtLeast", StringComparison.Ordinal))
+        {
+            patched = _windowsVersionCheckRegex.Replace(patched, "true");
+        }
+        return patched;
+    }
+
     private static string? ResolveScriptIncludePath(string rawTarget)
     {
         if (string.IsNullOrWhiteSpace(rawTarget))
@@ -544,7 +564,7 @@ public partial class ScriptManager : ObservableObject, IScriptManager, IDisposab
         }
 
         if (linesToRemove.Count == 0)
-            return source.Trim();
+            return ApplyLinuxScriptCompat(source.Trim());
 
         HashSet<string> linesToRemoveSet = new(linesToRemove);
         string[] sourceLines = source.Split(new[] { "\r\n", "\n" }, StringSplitOptions.None);
@@ -559,7 +579,7 @@ public partial class ScriptManager : ObservableObject, IScriptManager, IDisposab
             }
         }
 
-        return string.Join(Environment.NewLine, filteredLines).Trim();
+        return ApplyLinuxScriptCompat(string.Join(Environment.NewLine, filteredLines).Trim());
     }
 
     private void DiscoverAllIncludes(HashSet<string> references)
@@ -826,7 +846,7 @@ public partial class ScriptManager : ObservableObject, IScriptManager, IDisposab
 
         Parallel.ForEach(includedFilesSnapshot, new ParallelOptions { MaxDegreeOfParallelism = Environment.ProcessorCount }, includedFile =>
         {
-            string includeSource = File.ReadAllText(includedFile);
+            string includeSource = ApplyLinuxScriptCompat(File.ReadAllText(includedFile));
             CheckScriptVersionRequirement(includeSource);
             List<string> deps = ExtractIncludeDependencies(includeSource);
             List<string> normalizedDeps = new();
@@ -950,7 +970,7 @@ public partial class ScriptManager : ObservableObject, IScriptManager, IDisposab
 
         foreach (string newFile in newlyAddedFiles)
         {
-            string includeSource = File.ReadAllText(newFile);
+            string includeSource = ApplyLinuxScriptCompat(File.ReadAllText(newFile));
             CheckScriptVersionRequirement(includeSource);
             string includeFileName = Path.GetFileNameWithoutExtension(newFile);
             using SHA256 sha256 = SHA256.Create();

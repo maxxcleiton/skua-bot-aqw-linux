@@ -81,12 +81,12 @@ public partial class ScriptBotStats : ObservableObject, IScriptBotStats, IAsyncD
 
     public void GetSpace()
     {
-        InventoryFreeSpace = Inventory.FreeSlots;
-        InventoryFilledSpace = Inventory.UsedSlots;
-        InventorySpace = Inventory.Slots;
-        BankFreeSpace = Bank.FreeSlots;
-        BankFilledSpace = Bank.UsedSlots;
-        BankSpace = Bank.Slots;
+        InventoryFreeSpace = Math.Max(0, Inventory.FreeSlots);
+        InventoryFilledSpace = Math.Max(0, Inventory.UsedSlots);
+        InventorySpace = Math.Max(0, Inventory.Slots);
+        BankFreeSpace = Math.Max(0, Bank.FreeSlots);
+        BankFilledSpace = Math.Max(0, Bank.UsedSlots);
+        BankSpace = Math.Max(0, Bank.Slots);
     }
 
     private async Task HandleTimerAsync(PeriodicTimer timer, CancellationToken token)
