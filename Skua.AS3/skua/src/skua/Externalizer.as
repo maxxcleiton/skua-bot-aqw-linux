@@ -41,6 +41,9 @@ public class Externalizer {
         this.addCallback("setBackgroundValues", Main.setBackgroundValues);
         this.addCallback("isTrue", Main.isTrue);
         this.addCallback("isNull", Main.isNull);
+        this.addCallback("setFrameRate", Main.setFrameRate);
+        this.addCallback("setStageQuality", Main.setStageQuality);
+        this.addCallback("setShowFPS", Main.setShowFPS);
 
         // Game object access
         this.addCallback("getGameObject", Main.getGameObject);

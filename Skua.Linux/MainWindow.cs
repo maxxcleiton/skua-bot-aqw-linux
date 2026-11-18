@@ -218,6 +218,67 @@ public class MainWindow : Window
             }
         };
 
+        ComboBox fpsSelector = new()
+        {
+            ItemsSource = new[] { "60 FPS", "120 FPS", "240 FPS", "30 FPS" },
+            SelectedIndex = 0,
+            Width = 95,
+            Margin = new Thickness(4, 2, 2, 2)
+        };
+        fpsSelector.SelectionChanged += (_, _) =>
+        {
+            if (fpsSelector.SelectedItem is string s && int.TryParse(s.Split(' ')[0], out int fps))
+            {
+                Task.Run(() =>
+                {
+                    _bot.Options.SetFPS = fps;
+                    _bot.Flash.Call("setFrameRate", fps);
+                });
+            }
+        };
+
+        ComboBox qualitySelector = new()
+        {
+            ItemsSource = new[] { "Quality: HIGH", "Quality: MEDIUM", "Quality: LOW" },
+            SelectedIndex = 0,
+            Width = 140,
+            Margin = new Thickness(2)
+        };
+        qualitySelector.SelectionChanged += (_, _) =>
+        {
+            if (qualitySelector.SelectedItem is string s)
+            {
+                string q = s.Split(':')[1].Trim();
+                Task.Run(() => _bot.Flash.Call("setStageQuality", q));
+            }
+        };
+
+        CheckBox showFpsChk = new()
+        {
+            Content = "Show FPS",
+            Margin = new Thickness(6, 0)
+        };
+        showFpsChk.IsCheckedChanged += (_, _) =>
+        {
+            bool show = showFpsChk.IsChecked == true;
+            Task.Run(() =>
+            {
+                _bot.Options.ShowFPS = show;
+                _bot.Flash.Call("setShowFPS", show);
+            });
+        };
+
+        CheckBox lagKillerChk = new()
+        {
+            Content = "Lag Killer",
+            Margin = new Thickness(6, 0)
+        };
+        lagKillerChk.IsCheckedChanged += (_, _) =>
+        {
+            bool lk = lagKillerChk.IsChecked == true;
+            Task.Run(() => _bot.Options.LagKiller = lk);
+        };
+
         return new Border
         {
             Background = new SolidColorBrush(Color.Parse("#181825")),
@@ -245,7 +306,11 @@ public class MainWindow : Window
                     scriptStatusText,
                     bankBtn,
                     reloadFlashBtn,
-                    dockToggleBtn
+                    dockToggleBtn,
+                    fpsSelector,
+                    qualitySelector,
+                    showFpsChk,
+                    lagKillerChk
                 }
             }
         };

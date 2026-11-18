@@ -24,7 +24,7 @@ import skua.module.ModalMC;
 import skua.module.Modules;
 import skua.util.SFSEvent;
 
-[SWF(frameRate="30", backgroundColor="#000000", width="958", height="550")]
+[SWF(frameRate="60", backgroundColor="#000000", width="958", height="550")]
 public class Main extends MovieClip {
     public static var instance:Main;
     private static var _gameClass:Class;
@@ -119,6 +119,7 @@ public class Main extends MovieClip {
         }
 
         this.stg = stage;
+        this.stg.frameRate = 60;
         this.stg.removeChildAt(0);
         this.game = this.stg.addChild(this.loader.content);
         this.stg.scaleMode = StageScaleMode.SHOW_ALL;
@@ -380,6 +381,26 @@ public class Main extends MovieClip {
 
     public static function isTrue():String {
         return true.toString();
+    }
+
+    public static function setFrameRate(fps:int):void {
+        if (instance && instance.stage && fps > 0) {
+            instance.stage.frameRate = fps;
+        }
+    }
+
+    public static function setStageQuality(quality:String):void {
+        if (instance && instance.stage && quality) {
+            instance.stage.quality = quality.toLowerCase();
+        }
+    }
+
+    public static function setShowFPS(visible:Boolean):void {
+        try {
+            if (instance && instance.game && instance.game.ui && instance.game.ui.mcFPS) {
+                instance.game.ui.mcFPS.visible = visible;
+            }
+        } catch (e:Error) {}
     }
 
     public static function injectScript(uri:String):void {
