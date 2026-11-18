@@ -269,9 +269,13 @@ public class LinuxDialogService : IDialogService
     public bool? ShowDialog<TViewModel>(TViewModel viewModel, string title) where TViewModel : class
     {
         if (viewModel is InputDialogViewModel inputVm)
-        {
             return ShowInputDialog(inputVm, title);
-        }
+
+        if (viewModel is OptionContainerViewModel optVm)
+            return ShowOptionContainerDialog(optVm);
+
+        if (viewModel is FastTravelEditorDialogViewModel ftVm)
+            return ShowFastTravelEditDialog(ftVm);
 
         return ShowMessageBox(viewModel.ToString() ?? title, title, true);
     }
@@ -282,6 +286,297 @@ public class LinuxDialogService : IDialogService
         if (res == true)
             callback(viewModel);
         return res;
+    }
+
+    private static bool? ShowOptionContainerDialog(OptionContainerViewModel vm)
+    {
+        try
+        {
+            return ConfigureLinuxServices.RunSyncOnUi(async () =>
+            {
+                Window? owner = ConfigureLinuxServices.GetMainWindow();
+                if (owner is null || !owner.IsVisible)
+                    return (bool?)true;
+
+                bool? dialogResult = false;
+                Window win = new()
+                {
+                    Title = string.IsNullOrEmpty(vm.Title) ? "Script Options" : vm.Title,
+                    Width = 560,
+                    Height = 520,
+                    MinWidth = 420,
+                    MinHeight = 320,
+                    WindowStartupLocation = WindowStartupLocation.CenterOwner,
+                    Background = new SolidColorBrush(Color.Parse("#181825"))
+                };
+
+                StackPanel itemsPanel = new()
+                {
+                    Spacing = 10,
+                    Margin = new Thickness(4)
+                };
+
+                if (!string.IsNullOrWhiteSpace(vm.ResetNotice))
+                {
+                    itemsPanel.Children.Add(new Border
+                    {
+                        Background = new SolidColorBrush(Color.Parse("#2A2130")),
+                        BorderBrush = new SolidColorBrush(Color.Parse("#F9E2AF")),
+                        BorderThickness = new Thickness(1),
+                        CornerRadius = new CornerRadius(6),
+                        Padding = new Thickness(10),
+                        Child = new TextBlock
+                        {
+                            Text = vm.ResetNotice,
+                            Foreground = new SolidColorBrush(Color.Parse("#F9E2AF")),
+                            TextWrapping = TextWrapping.Wrap,
+                            FontSize = 12
+                        }
+                    });
+                }
+
+                List<Action> commitActions = new();
+
+                foreach (IGrouping<string, OptionContainerItemViewModel> group in vm.Options.GroupBy(o => o.Category))
+                {
+                    if (!string.IsNullOrWhiteSpace(group.Key))
+                    {
+                        itemsPanel.Children.Add(new TextBlock
+                        {
+                            Text = group.Key,
+                            FontWeight = FontWeight.Bold,
+                            FontSize = 13,
+                            Foreground = new SolidColorBrush(Color.Parse("#89B4FA")),
+                            Margin = new Thickness(2, 6, 0, 2)
+                        });
+                    }
+
+                    foreach (OptionContainerItemViewModel item in group)
+                    {
+                        StackPanel row = new() { Spacing = 4 };
+                        row.Children.Add(new TextBlock
+                        {
+                            Text = string.IsNullOrWhiteSpace(item.Option.DisplayName) ? item.Option.Name : item.Option.DisplayName,
+                            FontWeight = FontWeight.SemiBold,
+                            Foreground = new SolidColorBrush(Color.Parse("#CDD6F4")),
+                            FontSize = 12.5
+                        });
+
+                        if (!string.IsNullOrWhiteSpace(item.Option.Description))
+                        {
+                            row.Children.Add(new TextBlock
+                            {
+                                Text = item.Option.Description,
+                                Foreground = new SolidColorBrush(Color.Parse("#A6ADC8")),
+                                TextWrapping = TextWrapping.Wrap,
+                                FontSize = 11
+                            });
+                        }
+
+                        if (item.Type == typeof(bool))
+                        {
+                            bool initial = item.Value is bool b ? b : string.Equals(item.Value?.ToString(), "true", StringComparison.OrdinalIgnoreCase);
+                            CheckBox chk = new()
+                            {
+                                Content = "Enabled",
+                                IsChecked = initial,
+                                Foreground = new SolidColorBrush(Color.Parse("#CDD6F4"))
+                            };
+                            commitActions.Add(() => item.Value = chk.IsChecked == true);
+                            row.Children.Add(chk);
+                        }
+                        else if (item.Type.IsEnum && item.EnumValues is not null)
+                        {
+                            ComboBox cb = new()
+                            {
+                                ItemsSource = item.EnumValues,
+                                SelectedItem = item.SelectedValue ?? item.EnumValues.FirstOrDefault(),
+                                HorizontalAlignment = HorizontalAlignment.Stretch
+                            };
+                            commitActions.Add(() => item.SelectedValue = cb.SelectedItem?.ToString() ?? item.SelectedValue);
+                            row.Children.Add(cb);
+                        }
+                        else
+                        {
+                            TextBox tb = new()
+                            {
+                                Text = item.Value?.ToString() ?? string.Empty,
+                                HorizontalAlignment = HorizontalAlignment.Stretch
+                            };
+                            commitActions.Add(() => item.Value = tb.Text ?? string.Empty);
+                            row.Children.Add(tb);
+                        }
+
+                        itemsPanel.Children.Add(new Border
+                        {
+                            Background = new SolidColorBrush(Color.Parse("#1E1E2E")),
+                            BorderBrush = new SolidColorBrush(Color.Parse("#313244")),
+                            BorderThickness = new Thickness(1),
+                            CornerRadius = new CornerRadius(6),
+                            Padding = new Thickness(10, 8),
+                            Child = row
+                        });
+                    }
+                }
+
+                Button saveBtn = new()
+                {
+                    Content = "Save & Continue",
+                    Background = new SolidColorBrush(Color.Parse("#A6E3A1")),
+                    Foreground = Brushes.Black,
+                    FontWeight = FontWeight.Bold,
+                    Padding = new Thickness(16, 7)
+                };
+                Button cancelBtn = new()
+                {
+                    Content = "Cancel",
+                    Padding = new Thickness(14, 7)
+                };
+
+                saveBtn.Click += (_, _) =>
+                {
+                    foreach (Action commit in commitActions)
+                        commit();
+                    dialogResult = true;
+                    win.Close();
+                };
+                cancelBtn.Click += (_, _) =>
+                {
+                    dialogResult = false;
+                    win.Close();
+                };
+
+                Grid root = new()
+                {
+                    Margin = new Thickness(14),
+                    RowDefinitions = new RowDefinitions("Auto,*,Auto")
+                };
+
+                TextBlock header = new()
+                {
+                    Text = "Configure Script Options",
+                    FontSize = 15,
+                    FontWeight = FontWeight.Bold,
+                    Foreground = new SolidColorBrush(Color.Parse("#CDD6F4")),
+                    Margin = new Thickness(0, 0, 0, 10)
+                };
+                Grid.SetRow(header, 0);
+
+                ScrollViewer scroll = new() { Content = itemsPanel };
+                Grid.SetRow(scroll, 1);
+
+                StackPanel footer = new()
+                {
+                    Orientation = Orientation.Horizontal,
+                    HorizontalAlignment = HorizontalAlignment.Right,
+                    Spacing = 8,
+                    Margin = new Thickness(0, 12, 0, 0),
+                    Children = { cancelBtn, saveBtn }
+                };
+                Grid.SetRow(footer, 2);
+
+                root.Children.Add(header);
+                root.Children.Add(scroll);
+                root.Children.Add(footer);
+                win.Content = root;
+
+                await win.ShowDialog(owner);
+                return dialogResult;
+            });
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    private static bool? ShowFastTravelEditDialog(FastTravelEditorDialogViewModel vm)
+    {
+        try
+        {
+            return ConfigureLinuxServices.RunSyncOnUi(async () =>
+            {
+                Window? owner = ConfigureLinuxServices.GetMainWindow();
+                if (owner is null)
+                    return (bool?)false;
+
+                bool? dialogResult = false;
+                Window win = new()
+                {
+                    Title = "Edit Fast Travel",
+                    Width = 380,
+                    Height = 290,
+                    WindowStartupLocation = WindowStartupLocation.CenterOwner,
+                    Background = new SolidColorBrush(Color.Parse("#181825"))
+                };
+
+                TextBox descBox = new() { Text = vm.Editor.Travel.DescriptionName, Watermark = "Name / Description" };
+                TextBox mapBox = new() { Text = vm.Editor.Travel.MapName, Watermark = "Map (e.g. battleon)" };
+                TextBox cellBox = new() { Text = vm.Editor.Travel.Cell, Watermark = "Cell (e.g. Enter)" };
+                TextBox padBox = new() { Text = vm.Editor.Travel.Pad, Watermark = "Pad (e.g. Spawn)" };
+
+                Button saveBtn = new()
+                {
+                    Content = "Save",
+                    Background = new SolidColorBrush(Color.Parse("#89B4FA")),
+                    Foreground = Brushes.Black,
+                    FontWeight = FontWeight.Bold,
+                    Width = 90,
+                    HorizontalContentAlignment = HorizontalAlignment.Center
+                };
+                Button cancelBtn = new() { Content = "Cancel", Width = 90, HorizontalContentAlignment = HorizontalAlignment.Center };
+
+                saveBtn.Click += (_, _) =>
+                {
+                    vm.Editor.Travel.DescriptionName = descBox.Text?.Trim() ?? string.Empty;
+                    vm.Editor.Travel.MapName = mapBox.Text?.Trim() ?? string.Empty;
+                    vm.Editor.Travel.Cell = cellBox.Text?.Trim() ?? "Enter";
+                    vm.Editor.Travel.Pad = padBox.Text?.Trim() ?? "Spawn";
+                    dialogResult = true;
+                    win.Close();
+                };
+                cancelBtn.Click += (_, _) => { dialogResult = false; win.Close(); };
+
+                win.Content = new StackPanel
+                {
+                    Margin = new Thickness(16),
+                    Spacing = 8,
+                    Children =
+                    {
+                        new TextBlock { Text = "Description", Foreground = new SolidColorBrush(Color.Parse("#A6ADC8")), FontSize = 11 },
+                        descBox,
+                        new TextBlock { Text = "Map / Cell / Pad", Foreground = new SolidColorBrush(Color.Parse("#A6ADC8")), FontSize = 11 },
+                        mapBox,
+                        new Grid
+                        {
+                            ColumnDefinitions = new ColumnDefinitions("*,8,*"),
+                            Children =
+                            {
+                                cellBox,
+                                padBox
+                            }
+                        },
+                        new StackPanel
+                        {
+                            Orientation = Orientation.Horizontal,
+                            HorizontalAlignment = HorizontalAlignment.Right,
+                            Spacing = 8,
+                            Margin = new Thickness(0, 10, 0, 0),
+                            Children = { cancelBtn, saveBtn }
+                        }
+                    }
+                };
+                Grid.SetColumn(cellBox, 0);
+                Grid.SetColumn(padBox, 2);
+
+                await win.ShowDialog(owner);
+                return dialogResult;
+            });
+        }
+        catch
+        {
+            return false;
+        }
     }
 
     private static bool? ShowInputDialog(InputDialogViewModel vm, string title)
@@ -298,19 +593,27 @@ public class LinuxDialogService : IDialogService
                 Window win = new()
                 {
                     Title = string.IsNullOrEmpty(vm.Title) ? title : vm.Title,
-                    Width = 400,
-                    Height = 190,
+                    Width = 420,
+                    Height = 195,
                     WindowStartupLocation = WindowStartupLocation.CenterOwner,
-                    Background = new SolidColorBrush(Color.Parse("#1E1E2E"))
+                    Background = new SolidColorBrush(Color.Parse("#181825"))
                 };
 
                 TextBox inputBox = new()
                 {
                     Text = vm.DialogTextInput ?? string.Empty,
-                    Margin = new Thickness(0, 8, 0, 12)
+                    Margin = new Thickness(0, 8, 0, 14)
                 };
 
-                Button okBtn = new() { Content = "OK", Width = 90, HorizontalContentAlignment = HorizontalAlignment.Center };
+                Button okBtn = new()
+                {
+                    Content = "OK",
+                    Width = 90,
+                    HorizontalContentAlignment = HorizontalAlignment.Center,
+                    Background = new SolidColorBrush(Color.Parse("#89B4FA")),
+                    Foreground = Brushes.Black,
+                    FontWeight = FontWeight.Bold
+                };
                 Button cancelBtn = new() { Content = "Cancel", Width = 90, HorizontalContentAlignment = HorizontalAlignment.Center, Margin = new Thickness(8, 0, 0, 0) };
 
                 okBtn.Click += (_, _) =>
@@ -330,13 +633,13 @@ public class LinuxDialogService : IDialogService
                     Margin = new Thickness(16),
                     Children =
                     {
-                        new TextBlock { Text = vm.DialogHint, TextWrapping = TextWrapping.Wrap, Foreground = Brushes.White },
+                        new TextBlock { Text = vm.DialogHint, TextWrapping = TextWrapping.Wrap, Foreground = new SolidColorBrush(Color.Parse("#CDD6F4")) },
                         inputBox,
                         new StackPanel
                         {
                             Orientation = Orientation.Horizontal,
                             HorizontalAlignment = HorizontalAlignment.Right,
-                            Children = { okBtn, cancelBtn }
+                            Children = { cancelBtn, okBtn }
                         }
                     }
                 };
@@ -358,48 +661,72 @@ public class LinuxDialogService : IDialogService
 
     public bool? ShowMessageBox(string message, string caption, bool yesAndNo)
     {
+        DialogResult res = yesAndNo
+            ? ShowMessageBox(message, caption, "No", "Yes")
+            : ShowMessageBox(message, caption, "OK");
+        return yesAndNo ? res.Text == "Yes" : res.Text == "OK";
+    }
+
+    public DialogResult ShowMessageBox(string message, string caption, params string[] buttons)
+    {
         try
         {
+            if (buttons.Length == 0)
+                buttons = new[] { "OK" };
+
             return ConfigureLinuxServices.RunSyncOnUi(async () =>
             {
                 Window? owner = ConfigureLinuxServices.GetMainWindow();
                 if (owner is null || !owner.IsVisible)
                 {
                     Console.WriteLine($"[{caption}] {message}");
-                    return (bool?)true;
+                    return new DialogResult(buttons[^1], buttons.Length - 1);
                 }
 
-                bool? result = false;
+                DialogResult result = DialogResult.Cancelled;
                 Window dialog = new()
                 {
                     Title = caption,
-                    Width = 440,
-                    Height = 200,
+                    Width = 480,
+                    Height = 250,
+                    MinWidth = 360,
+                    MinHeight = 180,
                     WindowStartupLocation = WindowStartupLocation.CenterOwner,
-                    Background = new SolidColorBrush(Color.Parse("#1E1E2E"))
+                    Background = new SolidColorBrush(Color.Parse("#181825"))
                 };
 
                 StackPanel buttonsPanel = new()
                 {
                     Orientation = Orientation.Horizontal,
                     HorizontalAlignment = HorizontalAlignment.Right,
-                    Spacing = 8
+                    Spacing = 8,
+                    Margin = new Thickness(0, 12, 0, 0)
                 };
 
-                if (yesAndNo)
+                for (int i = 0; i < buttons.Length; i++)
                 {
-                    Button yesBtn = new() { Content = "Yes", Width = 85, HorizontalContentAlignment = HorizontalAlignment.Center };
-                    Button noBtn = new() { Content = "No", Width = 85, HorizontalContentAlignment = HorizontalAlignment.Center };
-                    yesBtn.Click += (_, _) => { result = true; dialog.Close(); };
-                    noBtn.Click += (_, _) => { result = false; dialog.Close(); };
-                    buttonsPanel.Children.Add(yesBtn);
-                    buttonsPanel.Children.Add(noBtn);
-                }
-                else
-                {
-                    Button okBtn = new() { Content = "OK", Width = 85, HorizontalContentAlignment = HorizontalAlignment.Center };
-                    okBtn.Click += (_, _) => { result = true; dialog.Close(); };
-                    buttonsPanel.Children.Add(okBtn);
+                    int idx = i;
+                    string text = buttons[i];
+                    bool isPrimary = i == buttons.Length - 1;
+                    Button btn = new()
+                    {
+                        Content = text,
+                        MinWidth = 86,
+                        HorizontalContentAlignment = HorizontalAlignment.Center,
+                        Padding = new Thickness(12, 6)
+                    };
+                    if (isPrimary)
+                    {
+                        btn.Background = new SolidColorBrush(Color.Parse("#89B4FA"));
+                        btn.Foreground = Brushes.Black;
+                        btn.FontWeight = FontWeight.Bold;
+                    }
+                    btn.Click += (_, _) =>
+                    {
+                        result = new DialogResult(text, idx);
+                        dialog.Close();
+                    };
+                    buttonsPanel.Children.Add(btn);
                 }
 
                 Grid grid = new()
@@ -408,18 +735,27 @@ public class LinuxDialogService : IDialogService
                     RowDefinitions = new RowDefinitions("*,Auto")
                 };
 
-                ScrollViewer scroll = new()
+                Border msgCard = new()
                 {
-                    Content = new TextBlock
+                    Background = new SolidColorBrush(Color.Parse("#1E1E2E")),
+                    BorderBrush = new SolidColorBrush(Color.Parse("#313244")),
+                    BorderThickness = new Thickness(1),
+                    CornerRadius = new CornerRadius(6),
+                    Padding = new Thickness(12),
+                    Child = new ScrollViewer
                     {
-                        Text = message,
-                        TextWrapping = TextWrapping.Wrap,
-                        Foreground = Brushes.White
+                        Content = new SelectableTextBlock
+                        {
+                            Text = message,
+                            TextWrapping = TextWrapping.Wrap,
+                            Foreground = new SolidColorBrush(Color.Parse("#CDD6F4")),
+                            FontSize = 12.5
+                        }
                     }
                 };
-                Grid.SetRow(scroll, 0);
+                Grid.SetRow(msgCard, 0);
                 Grid.SetRow(buttonsPanel, 1);
-                grid.Children.Add(scroll);
+                grid.Children.Add(msgCard);
                 grid.Children.Add(buttonsPanel);
 
                 dialog.Content = grid;
@@ -429,16 +765,8 @@ public class LinuxDialogService : IDialogService
         }
         catch
         {
-            return false;
+            return DialogResult.Cancelled;
         }
-    }
-
-    public DialogResult ShowMessageBox(string message, string caption, params string[] buttons)
-    {
-        bool? res = ShowMessageBox(message, caption, buttons.Length > 1);
-        return res == true
-            ? new DialogResult(buttons.Length > 1 ? buttons[1] : (buttons.FirstOrDefault() ?? "Yes"), 1)
-            : DialogResult.Cancelled;
     }
 }
 

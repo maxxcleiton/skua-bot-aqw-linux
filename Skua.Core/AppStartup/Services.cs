@@ -240,31 +240,63 @@ public static class Services
             {
                 if (_cachedBaseReferences == null)
                 {
+                    string runtimeDir = Path.GetDirectoryName(typeof(System.Runtime.GCSettings).GetTypeInfo().Assembly.Location)!;
                     string[] refPaths = {
                         typeof(object).GetTypeInfo().Assembly.Location,
                         typeof(Console).GetTypeInfo().Assembly.Location,
-                        typeof(object).Assembly.Location,
                         typeof(Enumerable).Assembly.Location,
                         typeof(ScriptManager).Assembly.Location,
-                        Path.Combine(Path.GetDirectoryName(typeof(System.Runtime.GCSettings).GetTypeInfo().Assembly.Location)!, "System.Runtime.dll")
+                        typeof(IScriptInterface).Assembly.Location,
+                        typeof(Skua.Core.Models.ClientFileSources).Assembly.Location,
+                        typeof(Skua.Core.Utils.RangedObservableCollection<>).Assembly.Location,
+                        typeof(Newtonsoft.Json.JsonConvert).Assembly.Location,
+                        typeof(CommunityToolkit.Mvvm.DependencyInjection.Ioc).Assembly.Location,
+                        typeof(System.Drawing.Color).Assembly.Location,
+                        typeof(System.Net.Http.HttpClient).Assembly.Location,
+                        typeof(System.Net.Sockets.TcpClient).Assembly.Location,
+                        typeof(System.Data.Common.DbConnection).Assembly.Location,
+                        typeof(System.Diagnostics.Process).Assembly.Location,
+                        typeof(System.Timers.Timer).Assembly.Location,
+                        typeof(System.Xml.Linq.XDocument).Assembly.Location,
+                        typeof(System.IO.Compression.ZipFile).Assembly.Location,
+                        typeof(System.Text.RegularExpressions.Regex).Assembly.Location,
+                        typeof(Microsoft.CSharp.RuntimeBinder.Binder).Assembly.Location,
+                        Path.Combine(runtimeDir, "System.Runtime.dll"),
+                        Path.Combine(runtimeDir, "netstandard.dll"),
+                        Path.Combine(runtimeDir, "System.Collections.dll"),
+                        Path.Combine(runtimeDir, "System.Collections.Concurrent.dll"),
+                        Path.Combine(runtimeDir, "System.ComponentModel.dll"),
+                        Path.Combine(runtimeDir, "System.ComponentModel.Primitives.dll"),
+                        Path.Combine(runtimeDir, "System.ComponentModel.TypeConverter.dll"),
+                        Path.Combine(runtimeDir, "System.Diagnostics.Process.dll"),
+                        Path.Combine(runtimeDir, "System.ObjectModel.dll"),
+                        Path.Combine(runtimeDir, "System.Net.Primitives.dll"),
+                        Path.Combine(runtimeDir, "System.Net.Requests.dll"),
+                        Path.Combine(runtimeDir, "System.Net.WebClient.dll"),
+                        Path.Combine(runtimeDir, "System.Security.Cryptography.dll"),
+                        Path.Combine(runtimeDir, "System.Text.Json.dll"),
+                        Path.Combine(runtimeDir, "System.Threading.dll"),
+                        Path.Combine(runtimeDir, "System.Threading.Thread.dll")
                     };
 
-                    List<PortableExecutableReference> refs = AppDomain.CurrentDomain
-                        .GetAssemblies()
-                        .Where(a => !a.IsDynamic)
-                        .Select(a => a.Location)
-                        .Where(s => !string.IsNullOrEmpty(s))
-                        .Where(s => !s.Contains("xunit"))
-                        .Select(s => MetadataReference.CreateFromFile(s))
-                        .ToList();
+                    HashSet<string> addedLocations = new(StringComparer.OrdinalIgnoreCase);
+                    List<PortableExecutableReference> refs = new();
 
-                    string? regexPath = typeof(System.Text.RegularExpressions.Regex).Assembly.Location;
-                    if (!string.IsNullOrEmpty(regexPath))
+                    void TryAddRef(string? path)
                     {
-                        refs.Add(MetadataReference.CreateFromFile(regexPath));
+                        if (!string.IsNullOrEmpty(path) && File.Exists(path) && addedLocations.Add(path))
+                            refs.Add(MetadataReference.CreateFromFile(path));
                     }
 
-                    refs.AddRange(refPaths.Select(s => MetadataReference.CreateFromFile(s)));
+                    foreach (Assembly asm in AppDomain.CurrentDomain.GetAssemblies())
+                    {
+                        if (!asm.IsDynamic && !string.IsNullOrEmpty(asm.Location) && !asm.Location.Contains("xunit"))
+                            TryAddRef(asm.Location);
+                    }
+
+                    foreach (string path in refPaths)
+                        TryAddRef(path);
+
                     _cachedBaseReferences = refs;
                 }
             }

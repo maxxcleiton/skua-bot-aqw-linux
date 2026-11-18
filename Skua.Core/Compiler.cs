@@ -33,6 +33,7 @@ public class Compiler : CSharpScriptExecution
 
     private static readonly ConcurrentDictionary<int, string> _compiledRegistry = new();
     private static readonly ConcurrentDictionary<string, Assembly> _loadedAssemblies = new(StringComparer.OrdinalIgnoreCase);
+    private static readonly ConcurrentDictionary<string, SemaphoreSlim> _inProcessCompileLocks = new(StringComparer.OrdinalIgnoreCase);
 
     public static bool IsCompiled(int hash) => _compiledRegistry.ContainsKey(hash) || TryLoadFromDiskCache(hash, null) != null;
 
@@ -351,19 +352,37 @@ public class Compiler : CSharpScriptExecution
 
     private bool CompileOrWaitForAssembly(string source, string outputPath, ScriptLoadContext? loadContext)
     {
-        string mutexName = $"Global\\Skua_Compile_{Path.GetFileName(outputPath).Replace(".dll", "").Replace("-", "_")}";
+        string safeKey = Path.GetFileName(outputPath).Replace(".dll", "").Replace("-", "_");
+        SemaphoreSlim inProcessLock = _inProcessCompileLocks.GetOrAdd(safeKey, _ => new SemaphoreSlim(1, 1));
         Mutex? compilationMutex = null;
+        bool mutexAcquired = false;
+
+        if (!inProcessLock.Wait(TimeSpan.FromMinutes(2)))
+        {
+            ErrorType = ExecutionErrorTypes.Compilation;
+            ErrorMessage = "Timeout waiting for script compilation to complete.";
+            SetErrors(new ApplicationException(ErrorMessage));
+            return false;
+        }
 
         try
         {
-            compilationMutex = new Mutex(false, mutexName);
-
-            if (!compilationMutex.WaitOne(TimeSpan.FromMinutes(2)))
+            if (OperatingSystem.IsWindows())
             {
-                ErrorType = ExecutionErrorTypes.Compilation;
-                ErrorMessage = "Timeout waiting for script compilation to complete.";
-                SetErrors(new ApplicationException(ErrorMessage));
-                return false;
+                try
+                {
+                    compilationMutex = new Mutex(false, $"Global\\Skua_Compile_{safeKey}");
+                    mutexAcquired = compilationMutex.WaitOne(TimeSpan.FromMinutes(2));
+                }
+                catch (AbandonedMutexException)
+                {
+                    mutexAcquired = true;
+                }
+                catch
+                {
+                    compilationMutex?.Dispose();
+                    compilationMutex = null;
+                }
             }
 
             try
@@ -424,41 +443,16 @@ public class Compiler : CSharpScriptExecution
             }
             finally
             {
-                compilationMutex.ReleaseMutex();
-            }
-        }
-        catch (AbandonedMutexException)
-        {
-            if (File.Exists(outputPath))
-            {
-                try
+                if (mutexAcquired)
                 {
-                    AssemblyName.GetAssemblyName(outputPath);
-
-                    if (loadContext != null)
-                    {
-                        using FileStream stream = File.OpenRead(outputPath);
-                        Assembly = loadContext.LoadFromStream(stream);
-                    }
-                    else
-                    {
-                        Assembly = Assembly.LoadFrom(outputPath);
-                    }
-                    return true;
-                }
-                catch
-                {
+                    try { compilationMutex?.ReleaseMutex(); } catch { }
                 }
             }
-
-            ErrorType = ExecutionErrorTypes.Compilation;
-            ErrorMessage = "Compilation was abandoned by another process.";
-            SetErrors(new ApplicationException(ErrorMessage));
-            return false;
         }
         finally
         {
             compilationMutex?.Dispose();
+            inProcessLock.Release();
         }
     }
 

@@ -31,11 +31,13 @@ public class ScriptInfo
     [JsonProperty("downloadUrl")]
     public string DownloadUrl { get; set; }
 
+    public string NormalizedFilePath => (FilePath ?? string.Empty).Replace('\\', Path.DirectorySeparatorChar).Replace('/', Path.DirectorySeparatorChar);
+
     public string RelativePath => FilePath == FileName ? "Scripts/" : $"Scripts/{FilePath.Replace(FileName, "")}";
 
-    public string LocalFile => Path.Combine(ClientFileSources.SkuaScriptsDIR, FilePath);
+    public string LocalFile => Path.Combine(ClientFileSources.SkuaScriptsDIR, NormalizedFilePath);
 
-    public string ManagerLocalFile => Path.Combine(ClientFileSources.SkuaScriptsDIR, FilePath);
+    public string ManagerLocalFile => Path.Combine(ClientFileSources.SkuaScriptsDIR, NormalizedFilePath);
 
     public bool Downloaded => File.Exists(LocalFile);
 

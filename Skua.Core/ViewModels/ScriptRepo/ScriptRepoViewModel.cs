@@ -103,9 +103,16 @@ public partial class ScriptRepoViewModel : BotControlViewModelBase
     }
 
     [RelayCommand]
-    private void LoadScript(ScriptInfoViewModel? script)
+    private async Task LoadScript(ScriptInfoViewModel? script)
     {
-        if (script is null || !script.Downloaded)
+        script ??= SelectedItem;
+        if (script is null)
+        {
+            ProgressHandler("Select a script first.");
+            return;
+        }
+
+        if (!await EnsureScriptAndDependenciesAsync(script))
             return;
 
         StrongReferenceMessenger.Default.Send<LoadScriptMessage, int>(new(script.LocalFile), (int)MessageChannels.ScriptStatus);
@@ -116,12 +123,117 @@ public partial class ScriptRepoViewModel : BotControlViewModelBase
     }
 
     [RelayCommand]
-    private void StartScript(ScriptInfoViewModel? script)
+    private async Task StartScript(ScriptInfoViewModel? script)
     {
-        if (script is null || !script.Downloaded)
+        script ??= SelectedItem;
+        if (script is null)
+        {
+            ProgressHandler("Select a script first.");
+            return;
+        }
+
+        if (!await EnsureScriptAndDependenciesAsync(script))
             return;
 
+        ProgressHandler($"Starting {script.FileName}...");
         StrongReferenceMessenger.Default.Send<StartScriptMessage, int>(new(script.LocalFile), (int)MessageChannels.ScriptStatus);
+    }
+
+    private async Task<bool> EnsureScriptAndDependenciesAsync(ScriptInfoViewModel script)
+    {
+        IsBusy = true;
+        try
+        {
+            Dictionary<string, ScriptInfo> lookup = new(StringComparer.OrdinalIgnoreCase);
+            foreach (ScriptInfo s in _getScriptsService.Scripts)
+            {
+                string key = s.FilePath.Replace('\\', '/').TrimStart('/');
+                if (!lookup.ContainsKey(key))
+                    lookup[key] = s;
+            }
+
+            if (!script.Downloaded)
+            {
+                ProgressReportMessage = $"Downloading {script.FileName}...";
+                await _getScriptsService.DownloadScriptAsync(script.Info);
+                script.Downloaded = File.Exists(script.LocalFile);
+            }
+
+            if (!File.Exists(script.LocalFile))
+            {
+                ProgressHandler($"Failed to download {script.FileName}.");
+                return false;
+            }
+
+            // Recursively download missing //cs_include dependencies (e.g. CoreBots.cs, CoreFarms.cs)
+            Queue<string> toInspect = new();
+            HashSet<string> inspected = new(StringComparer.OrdinalIgnoreCase);
+            toInspect.Enqueue(script.LocalFile);
+            inspected.Add(script.LocalFile);
+
+            int depsDownloaded = 0;
+            while (toInspect.Count > 0)
+            {
+                string currentFile = toInspect.Dequeue();
+                if (!File.Exists(currentFile))
+                    continue;
+
+                string[] lines;
+                try { lines = await File.ReadAllLinesAsync(currentFile); }
+                catch { continue; }
+
+                foreach (string rawLine in lines)
+                {
+                    string line = rawLine.Trim();
+                    if (line.StartsWith("using ", StringComparison.Ordinal))
+                        break;
+
+                    if (!line.StartsWith("//cs_include ", StringComparison.OrdinalIgnoreCase))
+                        continue;
+
+                    string target = line["//cs_include ".Length..].Trim().Replace('\\', '/');
+                    if (target.StartsWith("Scripts/", StringComparison.OrdinalIgnoreCase))
+                        target = target["Scripts/".Length..];
+
+                    if (lookup.TryGetValue(target, out ScriptInfo? depInfo))
+                    {
+                        if (!depInfo.Downloaded)
+                        {
+                            ProgressReportMessage = $"Downloading dependency {depInfo.FileName}...";
+                            await _getScriptsService.DownloadScriptAsync(depInfo);
+                            depsDownloaded++;
+                        }
+
+                        if (File.Exists(depInfo.LocalFile) && inspected.Add(depInfo.LocalFile))
+                            toInspect.Enqueue(depInfo.LocalFile);
+                    }
+                }
+            }
+
+            if (depsDownloaded > 0)
+            {
+                // Update VM badges for any downloaded dependencies visible in the list
+                foreach (ScriptInfoViewModel vm in _scripts)
+                {
+                    if (!vm.Downloaded && vm.Info.Downloaded)
+                        vm.Downloaded = true;
+                }
+                OnPropertyChanged(nameof(ScriptQuantity));
+                OnPropertyChanged(nameof(BotScriptQuantity));
+                await UpdateCountsAsync();
+            }
+
+            return true;
+        }
+        catch (Exception ex)
+        {
+            ProgressHandler($"Error preparing script: {ex.Message}");
+            return false;
+        }
+        finally
+        {
+            IsBusy = false;
+        }
     }
 
     // "Started" comes from ScriptStartedMessage, not the button: the loader may ask first, and a declined or failed
@@ -338,18 +450,16 @@ public partial class ScriptRepoViewModel : BotControlViewModelBase
     [RelayCommand]
     private async Task Download()
     {
-        IsBusy = true;
         if (_selectedItem is null)
+        {
+            ProgressHandler("Select a script first.");
             return;
+        }
 
-        ProgressReportMessage = $"Downloading {_selectedItem.FileName}.";
-        await _getScriptsService.DownloadScriptAsync(_selectedItem.Info);
-        ProgressReportMessage = $"Downloaded {_selectedItem.FileName}.";
-        _selectedItem.Downloaded = true;
-        OnPropertyChanged(nameof(ScriptQuantity));
-        OnPropertyChanged(nameof(BotScriptQuantity));
-        await UpdateCountsAsync();
-        IsBusy = false;
+        if (await EnsureScriptAndDependenciesAsync(_selectedItem))
+        {
+            ProgressHandler($"Downloaded {_selectedItem.FileName} (with dependencies).");
+        }
     }
 
     [RelayCommand]
