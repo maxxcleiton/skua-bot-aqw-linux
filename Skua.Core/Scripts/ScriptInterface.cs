@@ -272,23 +272,26 @@ public class ScriptInterface : IScriptInterface, IScriptInterfaceManager, IDispo
             {
                 sw.Restart();
 
-                if (Flash.IsWorldLoaded && Player.Playing)
+                _limit.LimitedRun("worldPoll", 250, () =>
                 {
-                    Servers.LastIP = Player.ServerIP ?? Servers.LastIP;
-
-                    if (Options.RestPackets && !Player.InCombat)
-                        _limit.LimitedRun("rest", 1200, () => Send.Packet("%xt%zm%restRequest%1%%"));
-
-                    if (!catching)
+                    if (Flash.IsWorldLoaded && Player.Playing)
                     {
-                        Flash.Call("catchPackets");
-                        catching = true;
+                        _limit.LimitedRun("serverIp", 2000, () => Servers.LastIP = Player.ServerIP ?? Servers.LastIP);
+
+                        if (Options.RestPackets && !Player.InCombat)
+                            _limit.LimitedRun("rest", 1200, () => Send.Packet("%xt%zm%restRequest%1%%"));
+
+                        if (!catching)
+                        {
+                            Flash.Call("catchPackets");
+                            catching = true;
+                        }
+
+                        CheckOptions();
                     }
+                });
 
-                    _limit.LimitedRun("opts", 250, CheckOptions);
-                }
-
-                _limit.LimitedRun("connDetail", 100, () => (lastConnChange, lastConnDetail) = CheckStuckonLoading(lastConnChange, lastConnDetail));
+                _limit.LimitedRun("connDetail", 500, () => (lastConnChange, lastConnDetail) = CheckStuckonLoading(lastConnChange, lastConnDetail));
 
                 UpdateCounterAttack();
 
@@ -296,7 +299,7 @@ public class ScriptInterface : IScriptInterface, IScriptInterfaceManager, IDispo
                     RunScriptHandlers();
 
                 sw.Stop();
-                Thread.Sleep(Math.Max(10, _timerDelay - (int)sw.Elapsed.TotalMilliseconds));
+                Thread.Sleep(Math.Max(20, (Manager.ScriptRunning ? _timerDelay : 100) - (int)sw.Elapsed.TotalMilliseconds));
             }
             catch (Exception e)
             {
@@ -573,7 +576,7 @@ public class ScriptInterface : IScriptInterface, IScriptInterfaceManager, IDispo
                                 break;
 
                             case "uotls":
-                                if (Player.Username == (string)data[2] && data[3] == "afk:true")
+                                if (data.Count > 3 && (string?)data[3] == "afk:true" && Player.Username == (string?)data[2])
                                     Messenger.Send<PlayerAFKMessage, int>((int)MessageChannels.GameEvents);
                                 break;
 

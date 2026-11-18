@@ -51,7 +51,8 @@ public class Main extends MovieClip {
     private var packetClient:*;
     private var packetDebug:Boolean;
     private static var _targetFPS:int = 60;
-    private static var _targetQuality:String = "medium";
+    private static var _targetQuality:String = "low";
+    private var _frameCounter:int = 0;
 
     public function Main() {
         String.prototype.trim = function():String {
@@ -196,13 +197,11 @@ public class Main extends MovieClip {
     }
 
     private function monitorLoginScreen(event:Event):void {
-        if (this.stg) {
-            if (this.stg.frameRate != _targetFPS) {
-                this.stg.frameRate = _targetFPS;
-            }
-            if (this.stg.quality.toLowerCase() != _targetQuality) {
-                this.stg.quality = _targetQuality;
-            }
+        if (++_frameCounter < 30) return;
+        _frameCounter = 0;
+
+        if (this.stg && this.stg.frameRate != _targetFPS) {
+            this.stg.frameRate = _targetFPS;
         }
         if (!this.customBGReady || !this.game || !this.game.mcLogin) return;
         
@@ -504,8 +503,6 @@ public class Main extends MovieClip {
         var message:String = packet.params.message;
         if (message.indexOf('[Sending - STR]: %xt%zm%') == 0) {
             instance.external.call('packet', message.substr('[Sending - STR]: '.length).replace(/^\s+|\s+$/g, ''));
-        } else {
-            instance.external.call("packetFromServer",processPacket(message));
         }
     }
 

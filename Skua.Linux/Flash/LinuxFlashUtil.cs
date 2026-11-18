@@ -240,7 +240,6 @@ public class LinuxFlashUtil : IFlashUtil
                     ? argsRoot.Elements().Select(FromFlashXml).ToArray()
                     : invokeEl.Elements().Select(FromFlashXml).ToArray();
 
-                Console.WriteLine($"[LinuxFlashUtil] FlashCall <- {function}({string.Join(", ", args.Select(a => a?.ToString() ?? "null"))})");
                 _ = Task.Run(() => DispatchFlashCall(function, args));
             }
         }
