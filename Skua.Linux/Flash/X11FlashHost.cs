@@ -223,14 +223,6 @@ public class X11FlashHost : NativeControlHost
         {
             if (_display != IntPtr.Zero)
             {
-                // If we embedded the flash window, try to reparent back to root before destroying
-                if (_flashTopLevelXid != IntPtr.Zero && _isEmbedded)
-                {
-                    IntPtr root = XDefaultRootWindow(_display);
-                    XReparentWindow(_display, _flashTopLevelXid, root, 0, 0);
-                    XSync(_display, false);
-                }
-
                 if (_containerXid != IntPtr.Zero)
                 {
                     XDestroyWindow(_display, _containerXid);

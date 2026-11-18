@@ -121,6 +121,7 @@ public class MainWindow : Window
 
         _bot.Flash.FlashCall += OnFlashCall;
         Opened += (_, _) => _bot.Flash.InitializeFlash();
+        Closed += (_, _) => _flashUtil.Dispose();
     }
 
     private bool _flashAttached;

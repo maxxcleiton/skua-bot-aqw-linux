@@ -75,6 +75,7 @@ public partial class App : Application
 
         try
         {
+            Services.GetRequiredService<IFlashUtil>().Dispose();
             Services.GetRequiredService<ICaptureProxy>().Stop();
             await ((IAsyncDisposable)Services.GetRequiredService<IScriptBoost>()).DisposeAsync();
             await ((IAsyncDisposable)Services.GetRequiredService<IScriptBotStats>()).DisposeAsync();
@@ -82,7 +83,6 @@ public partial class App : Application
             await Ioc.Default.GetRequiredService<IScriptManager>().StopScript();
             if (_bot is IScriptInterfaceManager botMgr)
                 await botMgr.StopTimerAsync();
-            Services.GetRequiredService<IFlashUtil>().Dispose();
             _startup?.Dispose();
             WeakReferenceMessenger.Default.Cleanup();
             WeakReferenceMessenger.Default.Reset();
