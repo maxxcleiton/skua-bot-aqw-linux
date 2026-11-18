@@ -87,6 +87,38 @@ public class X11FlashHost : NativeControlHost
         public IntPtr screen;
     }
 
+    [StructLayout(LayoutKind.Sequential)]
+    private struct XSetWindowAttributes
+    {
+        public IntPtr background_pixmap;
+        public ulong background_pixel;
+        public IntPtr border_pixmap;
+        public ulong border_pixel;
+        public int bit_gravity;
+        public int win_gravity;
+        public int backing_store;
+        public ulong backing_planes;
+        public ulong backing_pixel;
+        public int save_under;
+        public long event_mask;
+        public long do_not_propagate_mask;
+        public int override_redirect;
+        public IntPtr colormap;
+        public IntPtr cursor;
+    }
+
+    private const ulong CWOverrideRedirect = 1UL << 9;
+
+    [DllImport("libX11.so.6")]
+    private static extern int XChangeWindowAttributes(
+        IntPtr display, IntPtr window, ulong valuemask, ref XSetWindowAttributes attributes);
+
+    [DllImport("libX11.so.6")]
+    private static extern int XUnmapWindow(IntPtr display, IntPtr window);
+
+    [DllImport("libX11.so.6")]
+    private static extern int XMapRaised(IntPtr display, IntPtr window);
+
     [DllImport("libX11.so.6")]
     private static extern int XGetWindowAttributes(IntPtr display, IntPtr window, out XWindowAttributes windowAttributesReturn);
 
@@ -160,10 +192,13 @@ public class X11FlashHost : NativeControlHost
         ResizeEmbeddedWindow();
     }
 
+    private const int FlashChromeTopOffset = 56;
+
     public void AttachFlashProcess(int pid)
     {
         _targetPid = pid;
         _embeddedFlashXid = IntPtr.Zero;
+        _flashTopLevelXid = IntPtr.Zero;
 
         _searchTimer?.Stop();
         int attempts = 0;
@@ -188,24 +223,22 @@ public class X11FlashHost : NativeControlHost
             IntPtr topLevel = FindWindowByPid(_display, root, pidAtom, (ulong)_targetPid, 0);
             if (topLevel != IntPtr.Zero)
             {
-                IntPtr canvasChild = FindCanvasChild(_display, topLevel);
-                IntPtr targetToEmbed = canvasChild != IntPtr.Zero ? canvasChild : topLevel;
-
                 _flashTopLevelXid = topLevel;
-                _embeddedFlashXid = targetToEmbed;
+                _embeddedFlashXid = topLevel;
                 _searchTimer?.Stop();
 
                 uint w = (uint)Math.Max(100, Bounds.Width);
                 uint h = (uint)Math.Max(100, Bounds.Height);
-                XReparentWindow(_display, _embeddedFlashXid, _containerXid, 0, 0);
-                XMapWindow(_display, _embeddedFlashXid);
-                XMoveResizeWindow(_display, _embeddedFlashXid, 0, 0, w, h);
 
-                if (canvasChild != IntPtr.Zero && _flashTopLevelXid != IntPtr.Zero)
-                {
-                    XMoveResizeWindow(_display, _flashTopLevelXid, -2000, -2000, 10, 10);
-                }
+                XUnmapWindow(_display, _embeddedFlashXid);
+                XSync(_display, false);
 
+                XSetWindowAttributes swa = new() { override_redirect = 1 };
+                XChangeWindowAttributes(_display, _embeddedFlashXid, CWOverrideRedirect, ref swa);
+
+                XReparentWindow(_display, _embeddedFlashXid, _containerXid, 0, -FlashChromeTopOffset);
+                XMoveResizeWindow(_display, _embeddedFlashXid, 0, -FlashChromeTopOffset, w, h + (uint)FlashChromeTopOffset);
+                XMapRaised(_display, _embeddedFlashXid);
                 XSync(_display, false);
             }
         };
@@ -219,21 +252,16 @@ public class X11FlashHost : NativeControlHost
 
         try
         {
-            if (_flashTopLevelXid != IntPtr.Zero && _embeddedFlashXid != _flashTopLevelXid)
-            {
-                XMoveResizeWindow(_display, _flashTopLevelXid, 100, 100, 960, 606);
-                XMapWindow(_display, _flashTopLevelXid);
-                XReparentWindow(_display, _embeddedFlashXid, _flashTopLevelXid, 0, 56);
-                XMapWindow(_display, _embeddedFlashXid);
-                XMoveResizeWindow(_display, _embeddedFlashXid, 0, 56, 960, 550);
-            }
-            else
-            {
-                IntPtr root = XDefaultRootWindow(_display);
-                XReparentWindow(_display, _embeddedFlashXid, root, 100, 100);
-                XMapWindow(_display, _embeddedFlashXid);
-                XMoveResizeWindow(_display, _embeddedFlashXid, 100, 100, 960, 550);
-            }
+            IntPtr root = XDefaultRootWindow(_display);
+            XUnmapWindow(_display, _embeddedFlashXid);
+            XSync(_display, false);
+
+            XSetWindowAttributes swa = new() { override_redirect = 0 };
+            XChangeWindowAttributes(_display, _embeddedFlashXid, CWOverrideRedirect, ref swa);
+
+            XReparentWindow(_display, _embeddedFlashXid, root, 100, 100);
+            XMoveResizeWindow(_display, _embeddedFlashXid, 100, 100, 960, 606);
+            XMapRaised(_display, _embeddedFlashXid);
             XSync(_display, false);
             _embeddedFlashXid = IntPtr.Zero;
         }
@@ -263,7 +291,7 @@ public class X11FlashHost : NativeControlHost
             XMoveResizeWindow(_display, _containerXid, 0, 0, w, h);
             if (_embeddedFlashXid != IntPtr.Zero)
             {
-                XMoveResizeWindow(_display, _embeddedFlashXid, 0, 0, w, h);
+                XMoveResizeWindow(_display, _embeddedFlashXid, 0, -FlashChromeTopOffset, w, h + (uint)FlashChromeTopOffset);
             }
             XFlush(_display);
         }
