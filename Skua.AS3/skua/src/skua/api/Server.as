@@ -14,14 +14,90 @@ public class Server {
         super();
     }
 
+    public static function autoLogin(username:String, password:String, targetServer:String):String {
+        var state:int = 0;
+        var attempts:int = 0;
+        var maxAttempts:int = 200; // 40 seconds (200 * 200ms)
+
+        var loginTimer:Timer = new Timer(200, maxAttempts);
+        loginTimer.addEventListener(TimerEvent.TIMER, function(e:TimerEvent):void {
+            attempts++;
+            var g:* = (Main.instance != null) ? Main.instance.game : null;
+            if (g == null) return;
+
+            // If already in game, finish!
+            if (g.world != null && g.world.myAvatar != null && g.sfc != null && g.sfc.isConnected) {
+                loginTimer.stop();
+                return;
+            }
+
+            if (state == 0) {
+                if (g.mcLogin != null && g.mcLogin.sl != null && g.mcLogin.sl.iList != null && g.mcLogin.sl.iList.numChildren > 0) {
+                    state = 1;
+                } else if (g.mcLogin != null && g.mcLogin.ni != null && g.mcLogin.pi != null && g.mcLogin.btnLogin != null && g.mcLogin.visible) {
+                    try {
+                        g.mcLogin.ni.text = username;
+                        g.mcLogin.pi.text = password;
+                    } catch (err:Error) {}
+                    try {
+                        g.login(username.toLowerCase(), password);
+                    } catch (err:Error) {}
+                    state = 1;
+                }
+            } else if (state == 1) {
+                // Wait for servers screen
+                if (g.mcLogin != null && g.mcLogin.sl != null && g.mcLogin.sl.iList != null && g.mcLogin.sl.iList.numChildren > 0) {
+                    var source:* = g.mcLogin.sl.iList;
+                    var clicked:Boolean = false;
+                    for (var i:int = 0; i < source.numChildren; i++) {
+                        var child:* = source.getChildAt(i);
+                        if (child != null && child.tName != null && child.tName.ti != null && child.tName.ti.text != null) {
+                            var sName:String = child.tName.ti.text;
+                            if (sName.toLowerCase().indexOf(targetServer.toLowerCase()) > -1) {
+                                child.dispatchEvent(new MouseEvent(MouseEvent.CLICK));
+                                clicked = true;
+                                break;
+                            }
+                        }
+                    }
+                    if (!clicked && attempts > 50 && source.numChildren > 0) {
+                        // Fallback: click first server if target not found after 10s
+                        var fallback:* = source.getChildAt(0);
+                        if (fallback != null) {
+                            fallback.dispatchEvent(new MouseEvent(MouseEvent.CLICK));
+                            clicked = true;
+                        }
+                    }
+                    if (clicked) {
+                        state = 2;
+                    }
+                } else if (g.objLogin != null && g.objLogin.bSuccess == 0) {
+                    loginTimer.stop();
+                }
+            } else if (state == 2) {
+                if (g.world != null && g.world.myAvatar != null && g.sfc != null && g.sfc.isConnected) {
+                    loginTimer.stop();
+                }
+            }
+        });
+        loginTimer.start();
+        return "true";
+    }
+
     public static function clickServer(serverName:String):String {
+        if (Main.instance == null || Main.instance.game == null || Main.instance.game.mcLogin == null || Main.instance.game.mcLogin.sl == null) {
+            return false.toString();
+        }
         var source:* = Main.instance.game.mcLogin.sl.iList;
+        if (source == null) return false.toString();
         for (var i:int = 0; i < source.numChildren; i++) {
             var child:* = source.getChildAt(i);
 
-            if (child.tName.ti.text.toLowerCase().indexOf(serverName.toLowerCase()) > -1) {
-                child.dispatchEvent(new MouseEvent(MouseEvent.CLICK));
-                return true.toString();
+            if (child != null && child.tName != null && child.tName.ti != null && child.tName.ti.text != null) {
+                if (child.tName.ti.text.toLowerCase().indexOf(serverName.toLowerCase()) > -1) {
+                    child.dispatchEvent(new MouseEvent(MouseEvent.CLICK));
+                    return true.toString();
+                }
             }
         }
         return false.toString();

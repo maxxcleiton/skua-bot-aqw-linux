@@ -950,8 +950,8 @@ public sealed class SkuaLinuxStartupHandler : IDisposable
                     string targetServer = !string.IsNullOrEmpty(_result.Value.Server) ? _result.Value.Server : "Twilly";
                     Trace.WriteLine($"[StartupHandler] Flash loaded. Preparing auto-login for '{_result.Value.Username}' on '{targetServer}'...");
 
-                    // Wait 2 seconds for Flash login screen/timeline to fully settle
-                    await Task.Delay(2000);
+                    // Wait 500ms for Flash DOM to stabilize
+                    await Task.Delay(500);
 
                     // Set login credentials
                     _bot.Servers.SetLoginInfo(_result.Value.Username!, _result.Value.Password!);
@@ -959,20 +959,33 @@ public sealed class SkuaLinuxStartupHandler : IDisposable
                     // Pre-fill fields on AQW login screen UI if elements exist
                     try
                     {
-                        _bot.Flash.SetGameObject("mcLogin.txtUserName.text", _result.Value.Username!);
-                        _bot.Flash.SetGameObject("mcLogin.txtPassword.text", _result.Value.Password!);
+                        _bot.Flash.SetGameObject("mcLogin.ni.text", _result.Value.Username!);
+                        _bot.Flash.SetGameObject("mcLogin.pi.text", _result.Value.Password!);
                     }
                     catch { }
 
-                    // Perform resilient login and join server
-                    using CancellationTokenSource cts = new(TimeSpan.FromSeconds(60));
-                    bool connected = await _bot.Servers.EnsureRelogin(targetServer, cts.Token);
-                    Trace.WriteLine($"[StartupHandler] EnsureRelogin finished with: {connected}");
+                    // Trigger Flash-native autoLogin
+                    _bot.Flash.Call("autoLogin", _result.Value.Username!, _result.Value.Password!, targetServer);
 
-                    if (!connected && !_bot.Player.Playing)
+                    // Wait up to 30 seconds for avatar to spawn in-game
+                    for (int i = 0; i < 60 && !_bot.Player.Playing; i++)
                     {
-                        Trace.WriteLine($"[StartupHandler] Retrying login via Relogin({targetServer})...");
-                        _bot.Servers.Relogin(targetServer);
+                        await Task.Delay(500);
+                    }
+
+                    // Fallback to EnsureRelogin if native auto-login hasn't connected
+                    if (!_bot.Player.Playing)
+                    {
+                        Trace.WriteLine($"[StartupHandler] Native autoLogin not connected yet, calling EnsureRelogin fallback...");
+                        using CancellationTokenSource cts = new(TimeSpan.FromSeconds(30));
+                        bool connected = await _bot.Servers.EnsureRelogin(targetServer, cts.Token);
+                        Trace.WriteLine($"[StartupHandler] EnsureRelogin finished with: {connected}");
+
+                        if (!connected && !_bot.Player.Playing)
+                        {
+                            Trace.WriteLine($"[StartupHandler] Retrying login via Relogin({targetServer})...");
+                            _bot.Servers.Relogin(targetServer);
+                        }
                     }
 
                     if (!string.IsNullOrEmpty(_result.Value.Script))

@@ -60,6 +60,7 @@ public class Externalizer {
         // Server
         this.addCallback("connectToServer", Server.connectToServer);
         this.addCallback("clickServer", Server.clickServer);
+        this.addCallback("autoLogin", Server.autoLogin);
 
         // Player
         this.addCallback("isLoggedIn", Player.isLoggedIn);

@@ -80,6 +80,16 @@ public class LinuxFlashUtil : IFlashUtil
                 }
             }
 
+            string sessionSwf = Path.Combine(_sessionDir, "skua.swf");
+            try
+            {
+                File.Copy(swfPath, sessionSwf, true);
+            }
+            catch
+            {
+                sessionSwf = swfPath;
+            }
+
             string? playerBin = ResolveFlashPlayerBinary();
             if (playerBin is null)
             {
@@ -90,7 +100,7 @@ public class LinuxFlashUtil : IFlashUtil
             ProcessStartInfo psi = new()
             {
                 FileName = playerBin,
-                Arguments = $"\"{swfPath}\"",
+                Arguments = $"\"{sessionSwf}\"",
                 WorkingDirectory = _sessionDir,
                 UseShellExecute = false
             };

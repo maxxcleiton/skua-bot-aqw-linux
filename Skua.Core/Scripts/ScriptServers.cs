@@ -61,9 +61,16 @@ public partial class ScriptServers : ObservableRecipient, IScriptServers
 
     // Flash Methods Binding
 
-    [MethodCallBinding("login", GameFunction = true)]
+    [MethodCallBinding("login", RunMethodPre = true, GameFunction = true)]
     private void _login(string username, string password)
-    { }
+    {
+        try
+        {
+            Flash.SetGameObject("mcLogin.ni.text", username);
+            Flash.SetGameObject("mcLogin.pi.text", password);
+        }
+        catch { }
+    }
 
     [MethodCallBinding("logout", RunMethodPost = true, GameFunction = true)]
     private void _logout()
@@ -512,7 +519,10 @@ public partial class ScriptServers : ObservableRecipient, IScriptServers
                 if (IsConnected || tries > 1)
                     Logout();
 
-                Login();
+                if (_loginInfoSetted)
+                    Login(_username, _password);
+                else
+                    Login(Player.Username, Player.Password);
                 ReloginLog($"Attempt {tries}/{Options.ReloginTries}: waiting for server list screen.");
                 if (!await WaitForServerListReady(token))
                 {
