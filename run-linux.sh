@@ -13,6 +13,10 @@ if [ ! -f "$OUT_DIR/Skua" ]; then
     "$DIR/build-linux.sh"
 fi
 
+if [ -f "$DIR/Skua.AS3/skua/bin/skua.swf" ]; then
+    cp -f "$DIR/Skua.AS3/skua/bin/skua.swf" "$OUT_DIR/skua.swf"
+fi
+
 ln -sfn "$DIR/FFDec" "$OUT_DIR/FFDec"
 cd "$OUT_DIR"
 exec ./Skua "$@"

@@ -361,13 +361,15 @@ public class Externalizer {
     }
 
     private static function escapeXmlText(s:String):String {
-        if (s == null) return "";
+        if (s == null || s.length == 0) return "";
+        if (s.indexOf("&") == -1 && s.indexOf("<") == -1 && s.indexOf(">") == -1) return s;
         return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
     }
 
     private static function escapeXmlAttr(s:String):String {
-        if (s == null) return "";
-        return escapeXmlText(s).replace(/"/g, "&quot;");
+        if (s == null || s.length == 0) return "";
+        var esc:String = escapeXmlText(s);
+        return esc.indexOf('"') == -1 ? esc : esc.replace(/"/g, "&quot;");
     }
 
     public function addCallback(name:String, func:Function):void {

@@ -5,8 +5,10 @@ using Avalonia.Data;
 using Avalonia.Layout;
 using Avalonia.Media;
 using Avalonia.Threading;
+using CommunityToolkit.Mvvm.Messaging;
 using Microsoft.Extensions.DependencyInjection;
 using Skua.Core.Interfaces;
+using Skua.Core.Messaging;
 using Skua.Core.Models.Items;
 using Skua.Core.Models.Monsters;
 using Skua.Core.Models.Quests;
@@ -24,8 +26,10 @@ public class MainWindow : Window
     private readonly LinuxFlashUtil _flashUtil;
     private readonly X11FlashHost _flashHost;
     private readonly TextBlock _flashStatusBadge;
+    private readonly TextBlock _playerNameBadge;
     private readonly TabControl _rightTabs;
     private bool _isDocked = true;
+    private bool _fpsBoostEnabled = true;
 
     public MainWindow(IServiceProvider services)
     {
@@ -52,6 +56,16 @@ public class MainWindow : Window
             VerticalAlignment = VerticalAlignment.Center,
             FontWeight = FontWeight.SemiBold,
             Margin = new Thickness(8, 0)
+        };
+
+        _playerNameBadge = new TextBlock
+        {
+            Text = string.Empty,
+            IsVisible = false,
+            Foreground = new SolidColorBrush(Color.Parse("#FAB387")),
+            VerticalAlignment = VerticalAlignment.Center,
+            FontWeight = FontWeight.Bold,
+            Margin = new Thickness(6, 0)
         };
 
         _rightTabs = BuildRightTabs();
@@ -116,15 +130,47 @@ public class MainWindow : Window
             Dispatcher.UIThread.Post(() =>
             {
                 _flashStatusBadge.Text = $"Flash PID {pid} (Connecting...)";
+                if (_isDocked)
+                {
+                    _flashHost.AttachFlashProcess(pid);
+                }
             });
         };
 
+        StrongReferenceMessenger.Default.Register<MainWindow, LoginMessage, int>(
+            this,
+            (int)MessageChannels.GameEvents,
+            static (win, msg) => Dispatcher.UIThread.Post(() => win.SetLoggedPlayerName(msg.Username)));
+
+        StrongReferenceMessenger.Default.Register<MainWindow, LogoutMessage, int>(
+            this,
+            (int)MessageChannels.GameEvents,
+            static (win, _) => Dispatcher.UIThread.Post(() => win.SetLoggedPlayerName(string.Empty)));
+
         _bot.Flash.FlashCall += OnFlashCall;
         Opened += (_, _) => _bot.Flash.InitializeFlash();
-        Closed += (_, _) => _flashUtil.Dispose();
+        Closed += (_, _) =>
+        {
+            StrongReferenceMessenger.Default.UnregisterAll(this);
+            _flashUtil.Dispose();
+        };
     }
 
-    private bool _flashAttached;
+    private void SetLoggedPlayerName(string? username)
+    {
+        if (!string.IsNullOrWhiteSpace(username))
+        {
+            _playerNameBadge.Text = $"[{username}]";
+            _playerNameBadge.IsVisible = true;
+            Title = $"Skua Linux — {username}";
+        }
+        else
+        {
+            _playerNameBadge.Text = string.Empty;
+            _playerNameBadge.IsVisible = false;
+            Title = "Skua Linux (Native .NET 10 + Flash Socket Bridge)";
+        }
+    }
 
     private void OnFlashCall(string function, params object[] args)
     {
@@ -134,12 +180,14 @@ public class MainWindow : Window
             {
                 _flashStatusBadge.Text = function == "loaded" ? "AQW Loaded (Connected)" : "Loading AQW Client...";
                 _flashStatusBadge.Foreground = new SolidColorBrush(Color.Parse(function == "loaded" ? "#A6E3A1" : "#89B4FA"));
-                // Attach on first FlashCall that fires (requestLoadGame or loaded).
-                // The window must already be mapped for us to find it.
-                if (_isDocked && !_flashAttached && _flashUtil.FlashProcessId is int pid)
+                if (_isDocked && _flashUtil.FlashProcessId is int pid)
                 {
-                    _flashAttached = true;
                     _flashHost.AttachFlashProcess(pid);
+                }
+                if (function == "loaded")
+                {
+                    bool boost = _fpsBoostEnabled;
+                    Task.Run(() => _bot.Flash.Call(boost ? "modEnable" : "modDisable", "FpsBoost"));
                 }
             });
         }
@@ -207,7 +255,7 @@ public class MainWindow : Window
         };
         reloadFlashBtn.Click += (_, _) =>
         {
-            _flashAttached = false;
+            SetLoggedPlayerName(string.Empty);
             _bot.Flash.InitializeFlash();
         };
 
@@ -222,13 +270,11 @@ public class MainWindow : Window
             {
                 _flashHost.UndockFlashWindow();
                 _isDocked = false;
-                _flashAttached = false;
             }
             else
             {
                 _flashHost.RedockFlashWindow();
                 _isDocked = true;
-                _flashAttached = true;
             }
         };
 
@@ -265,6 +311,41 @@ public class MainWindow : Window
                 string q = s.Split(':')[1].Trim();
                 Task.Run(() => _bot.Flash.Call("setStageQuality", q));
             }
+        };
+
+        CheckBox fpsBoostChk = new()
+        {
+            Content = "FPS Boost",
+            IsChecked = true,
+            Margin = new Thickness(6, 0)
+        };
+        fpsBoostChk.IsCheckedChanged += (_, _) =>
+        {
+            bool boost = fpsBoostChk.IsChecked == true;
+            _fpsBoostEnabled = boost;
+            Task.Run(() => _bot.Flash.Call(boost ? "modEnable" : "modDisable", "FpsBoost"));
+        };
+
+        CheckBox hidePlayersChk = new()
+        {
+            Content = "Hide Players",
+            Margin = new Thickness(6, 0)
+        };
+        hidePlayersChk.IsCheckedChanged += (_, _) =>
+        {
+            bool hp = hidePlayersChk.IsChecked == true;
+            Task.Run(() => _bot.Options.HidePlayers = hp);
+        };
+
+        CheckBox disableFxChk = new()
+        {
+            Content = "Disable FX",
+            Margin = new Thickness(6, 0)
+        };
+        disableFxChk.IsCheckedChanged += (_, _) =>
+        {
+            bool dfx = disableFxChk.IsChecked == true;
+            Task.Run(() => _bot.Options.DisableFX = dfx);
         };
 
         CheckBox showFpsChk = new()
@@ -314,6 +395,7 @@ public class MainWindow : Window
                         Margin = new Thickness(4, 0, 8, 0)
                     },
                     _flashStatusBadge,
+                    _playerNameBadge,
                     loadScriptBtn,
                     toggleScriptBtn,
                     scriptNameText,
@@ -323,6 +405,9 @@ public class MainWindow : Window
                     dockToggleBtn,
                     fpsSelector,
                     qualitySelector,
+                    fpsBoostChk,
+                    hidePlayersChk,
+                    disableFxChk,
                     showFpsChk,
                     lagKillerChk
                 }

@@ -396,6 +396,22 @@ public class ScriptInterface : IScriptInterface, IScriptInterfaceManager, IDispo
         Handlers.Remove(rem);
     }
 
+    private string _cachedUsername = string.Empty;
+    private string _cachedUsernameLower = string.Empty;
+
+    private string GetCachedUsernameLower()
+    {
+        if (!string.IsNullOrEmpty(_cachedUsernameLower))
+            return _cachedUsernameLower;
+        string? u = Player.Username;
+        if (!string.IsNullOrEmpty(u))
+        {
+            _cachedUsername = u;
+            _cachedUsernameLower = u.ToLowerInvariant();
+        }
+        return _cachedUsernameLower;
+    }
+
     private void HandleFlashCall(string name, object[]? args)
     {
         switch (name)
@@ -466,7 +482,8 @@ public class ScriptInterface : IScriptInterface, IScriptInterfaceManager, IDispo
                                 break;
 
                             case "ct":
-                                dynamic p = data.p?[Player.Username.ToLower()]!;
+                                string myKey = GetCachedUsernameLower();
+                                dynamic? p = !string.IsNullOrEmpty(myKey) ? data.p?[myKey] : null;
                                 if (p is not null && p.intHP == 0)
                                 {
                                     Stats.Deaths++;
@@ -576,15 +593,22 @@ public class ScriptInterface : IScriptInterface, IScriptInterfaceManager, IDispo
                                 break;
 
                             case "uotls":
-                                if (data.Count > 3 && (string?)data[3] == "afk:true" && Player.Username == (string?)data[2])
-                                    Messenger.Send<PlayerAFKMessage, int>((int)MessageChannels.GameEvents);
+                                if (data.Count > 3 && (string?)data[3] == "afk:true")
+                                {
+                                    GetCachedUsernameLower();
+                                    if (string.Equals(_cachedUsername, (string?)data[2], StringComparison.OrdinalIgnoreCase))
+                                        Messenger.Send<PlayerAFKMessage, int>((int)MessageChannels.GameEvents);
+                                }
                                 break;
 
                             case "loginResponse":
+                                string loggedUser = Convert.ToString(data[4]) ?? string.Empty;
+                                _cachedUsername = loggedUser;
+                                _cachedUsernameLower = loggedUser.ToLowerInvariant();
                                 Stats.GetSpace();
                                 Options.CustomName = string.Empty;
                                 Options.CustomGuild = string.Empty;
-                                Messenger.Send<LoginMessage, int>(new(Convert.ToString(data[4])), (int)MessageChannels.GameEvents);
+                                Messenger.Send<LoginMessage, int>(new(loggedUser), (int)MessageChannels.GameEvents);
                                 break;
                         }
                     }
@@ -621,6 +645,8 @@ public class ScriptInterface : IScriptInterface, IScriptInterfaceManager, IDispo
                         case "cmd":
                             if (parts.Length >= 5 && parts[4] == "logout")
                             {
+                                _cachedUsername = string.Empty;
+                                _cachedUsernameLower = string.Empty;
                                 Messenger.Send<LogoutMessage, int>((int)MessageChannels.GameEvents);
                                 _ = OnLogout();
                             }

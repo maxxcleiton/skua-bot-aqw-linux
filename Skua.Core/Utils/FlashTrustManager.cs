@@ -18,6 +18,22 @@ public static class FlashTrustManager
         {
             Directory.CreateDirectory(TrustFolderPath);
 
+            if (!OperatingSystem.IsWindows())
+            {
+                string mmsDir = Path.Combine(
+                    Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
+                    ".macromedia", "Flash_Player");
+                string mmsCfg = Path.Combine(mmsDir, "mms.cfg");
+                if (!File.Exists(mmsCfg))
+                {
+                    File.WriteAllLines(mmsCfg, new[]
+                    {
+                        "OverrideGPUValidation=1",
+                        "EnableLinuxHWVideoDecode=1"
+                    });
+                }
+            }
+
             string trustFilePath = Path.Combine(TrustFolderPath, TrustFileName);
             string appDirectory = AppContext.BaseDirectory.TrimEnd(Path.DirectorySeparatorChar);
             string skuaDataDirectory = Path.Combine(

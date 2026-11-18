@@ -148,14 +148,40 @@ public partial class ScriptOption : ObservableRecipient, IScriptOption, IOptionD
         set => SetProperty(ref _reloginServer, value, true);
     }
 
-    [ObjectBinding("world.myAvatar.objData.strUsername", "world.rootClass.ui.mcPortrait.strName.text", "world.myAvatar.pMC.pname.ti.text", Get = false, HasSetter = true, Default = "string.Empty")]
     private string _customName = string.Empty;
+
+    public string CustomName
+    {
+        get => _customName;
+        set
+        {
+            if (!string.IsNullOrEmpty(value))
+            {
+                Flash.SetGameObject("world.myAvatar.objData.strUsername", value);
+                Flash.SetGameObject("world.rootClass.ui.mcPortrait.strName.text", value);
+                Flash.SetGameObject("world.myAvatar.pMC.pname.ti.text", value);
+            }
+            SetProperty(ref _customName, value ?? string.Empty);
+        }
+    }
 
     [ObjectBinding("world.myAvatar.pMC.pname.ti.textColor", Get = false, HasSetter = true, Default = "0xFFFFFF")]
     private int _nameColor = 0xFFFFFF;
 
-    [ObjectBinding("world.myAvatar.pMC.pname.tg.text", Get = false, HasSetter = true, Default = "string.Empty")]
     private string _customGuild = string.Empty;
+
+    public string CustomGuild
+    {
+        get => _customGuild;
+        set
+        {
+            if (!string.IsNullOrEmpty(value))
+            {
+                Flash.SetGameObject("world.myAvatar.pMC.pname.tg.text", value);
+            }
+            SetProperty(ref _customGuild, value ?? string.Empty);
+        }
+    }
 
     [ObjectBinding("world.myAvatar.pMC.pname.tg.textColor", Get = false, HasSetter = true)]
     public int _guildColor;

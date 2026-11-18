@@ -162,6 +162,16 @@ public class Main extends MovieClip {
     }
 
     public function onExtensionResponse(packet:*):void {
+        try {
+            if (packet && packet.params && packet.params.type == "str") {
+                var dataObj:Array = packet.params.dataObj as Array;
+                if (dataObj && dataObj.length > 0 && dataObj[0] == "uotls") {
+                    if (dataObj.length <= 3 || dataObj[3] != "afk:true") {
+                        return;
+                    }
+                }
+            }
+        } catch (e:Error) {}
         this.external.call('pext', JSON.stringify(packet));
     }
 
@@ -454,7 +464,10 @@ public class Main extends MovieClip {
     }
 
     private function maintainPacketCapture(event:Event):void {
-        // The game packet logger disables debug when it closes.
+        if (this.packetClient && this.packetClient == this.game.sfc) {
+            if (!this.packetClient.debug) this.packetClient.debug = true;
+            return;
+        }
         catchPackets();
     }
 

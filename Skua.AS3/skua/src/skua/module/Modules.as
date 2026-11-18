@@ -51,6 +51,8 @@ public class Modules {
         registerModule(new HidePlayers());
         registerModule(new DisableCollisions());
         registerModule(new DisableFX());
+        registerModule(new FpsBoost());
+        enable("FpsBoost");
     }
 }
 }
