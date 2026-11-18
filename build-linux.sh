@@ -16,6 +16,7 @@ cd "$DIR"
 dotnet build Skua.Linux/Skua.Linux.csproj -p:WarningLevel=0
 
 OUT_DIR="$DIR/Skua.Linux/bin/Debug/net10.0"
+cp -f "$DIR/Skua.AS3/skua/bin/skua.swf" "$OUT_DIR/skua.swf"
 ln -sfn "$DIR/FFDec" "$OUT_DIR/FFDec"
 
 echo "Build complete! Binary at: $OUT_DIR/Skua"

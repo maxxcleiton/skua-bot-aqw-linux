@@ -60,8 +60,34 @@ public class X11FlashHost : NativeControlHost
         IntPtr display, IntPtr window, out IntPtr rootReturn, out IntPtr parentReturn,
         out IntPtr childrenReturn, out uint nchildrenReturn);
 
+    [StructLayout(LayoutKind.Sequential)]
+    private struct XWindowAttributes
+    {
+        public int x, y;
+        public int width, height;
+        public int border_width;
+        public int depth;
+        public IntPtr visual;
+        public IntPtr root;
+        public int c_class;
+        public int bit_gravity;
+        public int win_gravity;
+        public int backing_store;
+        public ulong backing_planes;
+        public ulong backing_pixel;
+        public int save_under;
+        public IntPtr colormap;
+        public int map_installed;
+        public int map_state;
+        public long all_event_masks;
+        public long your_event_mask;
+        public long do_not_propagate_mask;
+        public int override_redirect;
+        public IntPtr screen;
+    }
+
     [DllImport("libX11.so.6")]
-    private static extern int XFree(IntPtr data);
+    private static extern int XGetWindowAttributes(IntPtr display, IntPtr window, out XWindowAttributes windowAttributesReturn);
 
     [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
     private delegate int XErrorHandlerDelegate(IntPtr display, IntPtr errorEvent);
@@ -224,13 +250,22 @@ public class X11FlashHost : NativeControlHost
         }
     }
 
+    [DllImport("libX11.so.6")]
+    private static extern int XFree(IntPtr data);
+
     private static IntPtr FindWindowByPid(IntPtr display, IntPtr window, IntPtr pidAtom, ulong targetPid, int depth)
     {
         if (depth > 6)
             return IntPtr.Zero;
 
         if (GetWindowPid(display, window, pidAtom) == targetPid)
-            return window;
+        {
+            if (XGetWindowAttributes(display, window, out XWindowAttributes attrs) != 0 &&
+                attrs.width >= 200 && attrs.height >= 200 && attrs.map_state == 2)
+            {
+                return window;
+            }
+        }
 
         if (XQueryTree(display, window, out _, out _, out IntPtr childrenPtr, out uint nChildren) == 0)
             return IntPtr.Zero;

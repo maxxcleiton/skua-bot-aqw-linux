@@ -200,9 +200,15 @@ public class Main extends MovieClip {
         if (++_frameCounter < 30) return;
         _frameCounter = 0;
 
-        if (this.stg && this.stg.frameRate != _targetFPS) {
-            this.stg.frameRate = _targetFPS;
+        if (this.stg) {
+            if (this.stg.frameRate != _targetFPS) {
+                this.stg.frameRate = _targetFPS;
+            }
+            if (this.stg.quality.toLowerCase() != _targetQuality) {
+                this.stg.quality = _targetQuality;
+            }
         }
+        this.optimizeWorldRendering();
         if (!this.customBGReady || !this.game || !this.game.mcLogin) return;
         
         if (this.game.mcLogin.visible && this.game.mcLogin.mcTitle) {
@@ -415,6 +421,30 @@ public class Main extends MovieClip {
         try {
             if (instance && instance.game && instance.game.ui && instance.game.ui.mcFPS) {
                 instance.game.ui.mcFPS.visible = visible;
+            }
+        } catch (e:Error) {}
+    }
+
+    private function optimizeWorldRendering():void {
+        try {
+            if (!this.game) return;
+            if (this.game.litePreference && this.game.litePreference.data) {
+                this.game.litePreference.data.bCachePlayers = true;
+                this.game.litePreference.data.bDisWepAnim = true;
+                this.game.litePreference.data.bDisDmgStrobe = true;
+            }
+            var world:* = this.game.world;
+            if (world && world.map) {
+                var mapClip:MovieClip = world.map as MovieClip;
+                if (mapClip) {
+                    var n:int = mapClip.numChildren;
+                    for (var i:int = 0; i < n; i++) {
+                        var child:DisplayObject = mapClip.getChildAt(i);
+                        if (child && child !== world.CHARS && child.name != "CHARS" && !child.cacheAsBitmap) {
+                            child.cacheAsBitmap = true;
+                        }
+                    }
+                }
             }
         } catch (e:Error) {}
     }

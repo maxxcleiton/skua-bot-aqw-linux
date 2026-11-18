@@ -239,7 +239,7 @@ public class MainWindow : Window
 
         ComboBox qualitySelector = new()
         {
-            ItemsSource = new[] { "Quality: HIGH", "Quality: MEDIUM", "Quality: LOW" },
+            ItemsSource = new[] { "Quality: LOW", "Quality: MEDIUM", "Quality: HIGH" },
             SelectedIndex = 0,
             Width = 140,
             Margin = new Thickness(2)

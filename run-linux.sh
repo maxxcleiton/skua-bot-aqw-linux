@@ -3,6 +3,8 @@ set -euo pipefail
 
 DIR="$(cd "$(dirname "$0")" && pwd)"
 export DOTNET_ROOT="$HOME/.dotnet"
+export GDK_BACKEND=x11
+export WAYLAND_DISPLAY=""
 export PATH="$HOME/.local/bin:$HOME/.dotnet:$DIR/.tools/jdk-17.0.21+9-jre/bin:$PATH"
 export JAVA_HOME="$DIR/.tools/jdk-17.0.21+9-jre"
 
