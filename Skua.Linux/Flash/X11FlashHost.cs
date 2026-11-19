@@ -104,6 +104,16 @@ public class X11FlashHost : NativeControlHost
     private static extern int XSetInputFocus(IntPtr display, IntPtr window, int revertTo, IntPtr time);
 
     [DllImport("libX11.so.6")]
+    private static extern int XSendEvent(
+        IntPtr display, IntPtr window, bool propagate, long eventMask, IntPtr eventSend);
+
+    [DllImport("libX11.so.6")]
+    private static extern uint XKeysymToKeycode(IntPtr display, IntPtr keysym);
+
+    [DllImport("libXtst.so.6", EntryPoint = "XTestFakeKeyEvent")]
+    private static extern int XTestFakeKeyEvent(IntPtr display, uint keycode, bool isPress, ulong delay);
+
+    [DllImport("libX11.so.6")]
     private static extern int XChangeProperty(
         IntPtr display, IntPtr window, IntPtr property, IntPtr type,
         int format, int mode, IntPtr[] data, int nelements);
@@ -160,6 +170,38 @@ public class X11FlashHost : NativeControlHost
         public IntPtr cursor;
     }
 
+    [StructLayout(LayoutKind.Sequential)]
+    private struct XFocusChangeEvent
+    {
+        public int type;
+        public ulong serial;
+        public int send_event;
+        public IntPtr display;
+        public IntPtr window;
+        public int mode;
+        public int detail;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct XKeyEvent
+    {
+        public int type; // 2 = KeyPress, 3 = KeyRelease
+        public ulong serial;
+        public int send_event;
+        public IntPtr display;
+        public IntPtr window;
+        public IntPtr root;
+        public IntPtr subwindow;
+        public ulong time;
+        public int x;
+        public int y;
+        public int x_root;
+        public int y_root;
+        public uint state;
+        public uint keycode;
+        public int same_screen;
+    }
+
     private const ulong CWOverrideRedirect = 1UL << 9;
     private const long SubstructureNotifyMask = 1L << 19;
     private const long StructureNotifyMask = 1L << 17;
@@ -168,6 +210,18 @@ public class X11FlashHost : NativeControlHost
 
     private static readonly XErrorHandlerDelegate IgnoreXError = (_, _) => 0;
     private static bool _errorHandlerInstalled;
+    private static bool _xtstChecked;
+    private static bool _xtstAvailable;
+
+    private static bool IsXtstAvailable()
+    {
+        if (!_xtstChecked)
+        {
+            _xtstAvailable = NativeLibrary.TryLoad("libXtst.so.6", out _);
+            _xtstChecked = true;
+        }
+        return _xtstAvailable;
+    }
 
     public X11FlashHost()
     {
@@ -181,16 +235,197 @@ public class X11FlashHost : NativeControlHost
             try
             {
                 XSetInputFocus(_display, _flashTopLevelXid, 2 /* RevertToParent */, IntPtr.Zero);
+
+                XFocusChangeEvent fev = new()
+                {
+                    type = 9, // FocusIn
+                    serial = 0,
+                    send_event = 0,
+                    display = _display,
+                    window = _flashTopLevelXid,
+                    mode = 0, // NotifyNormal
+                    detail = 0 // NotifyAncestor
+                };
+                IntPtr ptr = Marshal.AllocHGlobal(Marshal.SizeOf<XFocusChangeEvent>());
+                try
+                {
+                    Marshal.StructureToPtr(fev, ptr, false);
+                    XSendEvent(_display, _flashTopLevelXid, false, 1L << 21 /* FocusChangeMask */, ptr);
+                }
+                finally
+                {
+                    Marshal.FreeHGlobal(ptr);
+                }
+
                 XFlush(_display);
             }
             catch { }
         }
     }
 
+    protected override void OnPointerEntered(Avalonia.Input.PointerEventArgs e)
+    {
+        base.OnPointerEntered(e);
+        FocusFlashWindow();
+    }
+
+    protected override void OnPointerMoved(Avalonia.Input.PointerEventArgs e)
+    {
+        base.OnPointerMoved(e);
+        FocusFlashWindow();
+    }
+
     protected override void OnPointerPressed(Avalonia.Input.PointerPressedEventArgs e)
     {
         base.OnPointerPressed(e);
         FocusFlashWindow();
+    }
+
+    public static IntPtr KeyToKeysym(Avalonia.Input.Key key, Avalonia.Input.KeyModifiers modifiers)
+    {
+        bool shift = (modifiers & Avalonia.Input.KeyModifiers.Shift) != 0;
+
+        if (key >= Avalonia.Input.Key.A && key <= Avalonia.Input.Key.Z)
+        {
+            int offset = (int)key - (int)Avalonia.Input.Key.A;
+            return new IntPtr(shift ? ('A' + offset) : ('a' + offset));
+        }
+
+        if (key >= Avalonia.Input.Key.D0 && key <= Avalonia.Input.Key.D9)
+        {
+            if (shift)
+            {
+                char shifted = key switch
+                {
+                    Avalonia.Input.Key.D1 => '!',
+                    Avalonia.Input.Key.D2 => '@',
+                    Avalonia.Input.Key.D3 => '#',
+                    Avalonia.Input.Key.D4 => '$',
+                    Avalonia.Input.Key.D5 => '%',
+                    Avalonia.Input.Key.D6 => '^',
+                    Avalonia.Input.Key.D7 => '&',
+                    Avalonia.Input.Key.D8 => '*',
+                    Avalonia.Input.Key.D9 => '(',
+                    _ => ')'
+                };
+                return new IntPtr(shifted);
+            }
+            return new IntPtr('0' + ((int)key - (int)Avalonia.Input.Key.D0));
+        }
+
+        if (key >= Avalonia.Input.Key.NumPad0 && key <= Avalonia.Input.Key.NumPad9)
+        {
+            return new IntPtr(0xFFB0 + ((int)key - (int)Avalonia.Input.Key.NumPad0));
+        }
+
+        return key switch
+        {
+            Avalonia.Input.Key.Enter => new IntPtr(0xFF0D),
+            Avalonia.Input.Key.Back => new IntPtr(0xFF08),
+            Avalonia.Input.Key.Tab => new IntPtr(0xFF09),
+            Avalonia.Input.Key.Escape => new IntPtr(0xFF1B),
+            Avalonia.Input.Key.Space => new IntPtr(0x0020),
+            Avalonia.Input.Key.Delete => new IntPtr(0xFFFF),
+            Avalonia.Input.Key.Left => new IntPtr(0xFF51),
+            Avalonia.Input.Key.Up => new IntPtr(0xFF52),
+            Avalonia.Input.Key.Right => new IntPtr(0xFF53),
+            Avalonia.Input.Key.Down => new IntPtr(0xFF54),
+            Avalonia.Input.Key.Home => new IntPtr(0xFF50),
+            Avalonia.Input.Key.End => new IntPtr(0xFF57),
+            Avalonia.Input.Key.PageUp => new IntPtr(0xFF55),
+            Avalonia.Input.Key.PageDown => new IntPtr(0xFF56),
+
+            Avalonia.Input.Key.OemPeriod => new IntPtr(shift ? '>' : '.'),
+            Avalonia.Input.Key.OemComma => new IntPtr(shift ? '<' : ','),
+            Avalonia.Input.Key.OemMinus => new IntPtr(shift ? '_' : '-'),
+            Avalonia.Input.Key.OemPlus => new IntPtr(shift ? '+' : '='),
+            Avalonia.Input.Key.OemQuestion => new IntPtr(shift ? '?' : '/'),
+            Avalonia.Input.Key.OemSemicolon => new IntPtr(shift ? ':' : ';'),
+            Avalonia.Input.Key.OemQuotes => new IntPtr(shift ? '"' : '\''),
+            Avalonia.Input.Key.OemOpenBrackets => new IntPtr(shift ? '{' : '['),
+            Avalonia.Input.Key.OemCloseBrackets => new IntPtr(shift ? '}' : ']'),
+            Avalonia.Input.Key.OemPipe => new IntPtr(shift ? '|' : '\\'),
+            Avalonia.Input.Key.OemTilde => new IntPtr(shift ? '~' : '`'),
+
+            _ => IntPtr.Zero
+        };
+    }
+
+    public bool ForwardKey(Avalonia.Input.Key key, Avalonia.Input.KeyModifiers modifiers, bool isPress)
+    {
+        if (_display == IntPtr.Zero || _flashTopLevelXid == IntPtr.Zero)
+            return false;
+
+        IntPtr keysym = KeyToKeysym(key, modifiers);
+        if (keysym == IntPtr.Zero)
+            return false;
+
+        try
+        {
+            uint keycode = XKeysymToKeycode(_display, keysym);
+            if (keycode == 0)
+                return false;
+
+            bool shift = (modifiers & Avalonia.Input.KeyModifiers.Shift) != 0;
+
+            if (IsXtstAvailable())
+            {
+                if (shift && isPress)
+                {
+                    uint shiftKc = XKeysymToKeycode(_display, new IntPtr(0xFFE1 /* XK_Shift_L */));
+                    if (shiftKc != 0) XTestFakeKeyEvent(_display, shiftKc, true, 0);
+                }
+
+                XTestFakeKeyEvent(_display, keycode, isPress, 0);
+
+                if (shift && !isPress)
+                {
+                    uint shiftKc = XKeysymToKeycode(_display, new IntPtr(0xFFE1 /* XK_Shift_L */));
+                    if (shiftKc != 0) XTestFakeKeyEvent(_display, shiftKc, false, 0);
+                }
+            }
+            else
+            {
+                XKeyEvent kev = new()
+                {
+                    type = isPress ? 2 : 3,
+                    serial = 0,
+                    send_event = 0,
+                    display = _display,
+                    window = _flashTopLevelXid,
+                    root = XDefaultRootWindow(_display),
+                    subwindow = IntPtr.Zero,
+                    time = 0,
+                    x = 100,
+                    y = 100,
+                    x_root = 100,
+                    y_root = 100,
+                    state = (uint)(((modifiers & Avalonia.Input.KeyModifiers.Shift) != 0 ? 1 : 0) |
+                                   ((modifiers & Avalonia.Input.KeyModifiers.Control) != 0 ? 4 : 0) |
+                                   ((modifiers & Avalonia.Input.KeyModifiers.Alt) != 0 ? 8 : 0)),
+                    keycode = keycode,
+                    same_screen = 1
+                };
+
+                IntPtr ptr = Marshal.AllocHGlobal(Marshal.SizeOf<XKeyEvent>());
+                try
+                {
+                    Marshal.StructureToPtr(kev, ptr, false);
+                    XSendEvent(_display, _flashTopLevelXid, true, isPress ? (1L << 0) : (1L << 1), ptr);
+                }
+                finally
+                {
+                    Marshal.FreeHGlobal(ptr);
+                }
+            }
+
+            XFlush(_display);
+            return true;
+        }
+        catch
+        {
+            return false;
+        }
     }
 
     protected override IPlatformHandle CreateNativeControlCore(IPlatformHandle parent)
@@ -384,16 +619,17 @@ public class X11FlashHost : NativeControlHost
             }
 
             // Step 3: WM has completely released _flashTopLevelXid back to root while unmapped.
-            // Set override_redirect = 1, reparent into _containerXid, map, and force WM_STATE = NormalState (1)
-            // so GTK2/Flash never pauses rendering due to WithdrawnState.
+            // Reparent into _containerXid, set override_redirect = 0 so it participates in standard X11 focus
+            // and receives FocusIn / Key events, map, and force WM_STATE = NormalState (1).
             (uint w, uint h) = GetTargetContainerSize();
             XResizeWindow(_display, _containerXid, w, h);
 
-            XSetWindowAttributes swaEmbed = new() { override_redirect = 1 };
-            XChangeWindowAttributes(_display, _flashTopLevelXid, CWOverrideRedirect, ref swaEmbed);
-
             XReparentWindow(_display, _flashTopLevelXid, _containerXid, 0, -_chromeHeight);
             XMoveResizeWindow(_display, _flashTopLevelXid, 0, -_chromeHeight, w, h + (uint)_chromeHeight);
+
+            XSetWindowAttributes swaEmbed = new() { override_redirect = 0 };
+            XChangeWindowAttributes(_display, _flashTopLevelXid, CWOverrideRedirect, ref swaEmbed);
+
             XMapRaised(_display, _flashTopLevelXid);
             EnsureWmStateNormal(_display, _flashTopLevelXid);
             XSync(_display, false);
@@ -462,6 +698,11 @@ public class X11FlashHost : NativeControlHost
 
             if (XGetWindowAttributes(_display, _flashTopLevelXid, out XWindowAttributes attrs) != 0)
             {
+                if (attrs.override_redirect != 0)
+                {
+                    XSetWindowAttributes swaNormal = new() { override_redirect = 0 };
+                    XChangeWindowAttributes(_display, _flashTopLevelXid, CWOverrideRedirect, ref swaNormal);
+                }
                 if (attrs.x != 0 || attrs.y != -_chromeHeight || attrs.width != (int)w || attrs.height != targetH)
                 {
                     XResizeWindow(_display, _containerXid, w, h);

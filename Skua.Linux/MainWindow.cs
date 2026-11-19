@@ -4,6 +4,8 @@ using Avalonia.Controls.Primitives;
 using Avalonia.Controls.Shapes;
 using Avalonia.Controls.Templates;
 using Avalonia.Data;
+using Avalonia.Input;
+using Avalonia.Interactivity;
 using Avalonia.Layout;
 using Avalonia.Media;
 using Avalonia.Threading;
@@ -176,12 +178,41 @@ public class MainWindow : Window
             static (win, _) => Dispatcher.UIThread.Post(() => win.SetLoggedPlayerName(string.Empty)));
 
         _bot.Flash.FlashCall += OnFlashCall;
+        AddHandler(InputElement.KeyDownEvent, OnGlobalKeyDown, RoutingStrategies.Tunnel);
+        AddHandler(InputElement.KeyUpEvent, OnGlobalKeyUp, RoutingStrategies.Tunnel);
+        Activated += (_, _) => _flashHost.FocusFlashWindow();
+
         Opened += (_, _) => _bot.Flash.InitializeFlash();
         Closed += (_, _) =>
         {
             StrongReferenceMessenger.Default.UnregisterAll(this);
             _flashUtil.Dispose();
         };
+    }
+
+    private void OnGlobalKeyDown(object? sender, KeyEventArgs e)
+    {
+        var focused = FocusManager?.GetFocusedElement();
+        if (focused is TextBox or AutoCompleteBox)
+            return;
+
+        _flashHost.FocusFlashWindow();
+        if (_flashHost.ForwardKey(e.Key, e.KeyModifiers, isPress: true))
+        {
+            e.Handled = true;
+        }
+    }
+
+    private void OnGlobalKeyUp(object? sender, KeyEventArgs e)
+    {
+        var focused = FocusManager?.GetFocusedElement();
+        if (focused is TextBox or AutoCompleteBox)
+            return;
+
+        if (_flashHost.ForwardKey(e.Key, e.KeyModifiers, isPress: false))
+        {
+            e.Handled = true;
+        }
     }
 
     private void LoadWindowIcon()
