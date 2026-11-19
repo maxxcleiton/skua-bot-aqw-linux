@@ -81,6 +81,88 @@ internal static class AccountsTab
         serverRow.Children.Add(serverCombo);
         headerStack.Children.Add(serverRow);
 
+        // Script selection row
+        Grid scriptRow = new()
+        {
+            ColumnDefinitions = new ColumnDefinitions("Auto,*,Auto,Auto"),
+            Margin = new Thickness(0, 2, 0, 0)
+        };
+
+        TextBlock scriptLabel = new()
+        {
+            Text = "Script:",
+            Foreground = UiTheme.TextDim,
+            FontSize = 12,
+            VerticalAlignment = VerticalAlignment.Center,
+            Margin = new Thickness(0, 0, 10, 0)
+        };
+
+        TextBox scriptBox = new()
+        {
+            IsReadOnly = true,
+            Watermark = "No script selected (optional)...",
+            FontSize = 12,
+            VerticalAlignment = VerticalAlignment.Center,
+            Margin = new Thickness(0, 0, 6, 0)
+        };
+        scriptBox.Bind(TextBox.TextProperty, new Binding(nameof(AccountManagerViewModel.ScriptPath))
+        {
+            Source = vm,
+            Mode = BindingMode.OneWay
+        });
+
+        Button browseScriptBtn = new()
+        {
+            Content = "📂 Select Script",
+            Background = UiTheme.BgSurface,
+            Foreground = UiTheme.Blue,
+            FontWeight = FontWeight.Bold,
+            FontSize = 11.5,
+            Padding = new Thickness(10, 5),
+            Margin = new Thickness(0, 0, 4, 0),
+            Command = vm.ChangeScriptPathCommand
+        };
+
+        Button clearScriptBtn = new()
+        {
+            Content = "✕",
+            Background = UiTheme.BgBase,
+            Foreground = UiTheme.Red,
+            FontWeight = FontWeight.Bold,
+            FontSize = 11.5,
+            Padding = new Thickness(8, 5)
+        };
+        clearScriptBtn.Click += (_, _) =>
+        {
+            vm.ScriptPath = string.Empty;
+            vm.StartWithScript = false;
+        };
+
+        Grid.SetColumn(scriptLabel, 0);
+        Grid.SetColumn(scriptBox, 1);
+        Grid.SetColumn(browseScriptBtn, 2);
+        Grid.SetColumn(clearScriptBtn, 3);
+        scriptRow.Children.Add(scriptLabel);
+        scriptRow.Children.Add(scriptBox);
+        scriptRow.Children.Add(browseScriptBtn);
+        scriptRow.Children.Add(clearScriptBtn);
+        headerStack.Children.Add(scriptRow);
+
+        // Auto-run checkbox row
+        CheckBox autoRunCheck = new()
+        {
+            Content = "Auto-execute selected script on client launch",
+            Foreground = UiTheme.TextPrimary,
+            FontSize = 11.5,
+            Margin = new Thickness(0, 2, 0, 4)
+        };
+        autoRunCheck.Bind(ToggleButton.IsCheckedProperty, new Binding(nameof(AccountManagerViewModel.StartWithScript))
+        {
+            Source = vm,
+            Mode = BindingMode.TwoWay
+        });
+        headerStack.Children.Add(autoRunCheck);
+
         // Action buttons row
         WrapPanel actionsRow = new()
         {

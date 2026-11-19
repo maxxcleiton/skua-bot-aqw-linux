@@ -990,9 +990,29 @@ public sealed class SkuaLinuxStartupHandler : IDisposable
 
                     if (!string.IsNullOrEmpty(_result.Value.Script))
                     {
-                        await Task.Delay(3000);
-                        StrongReferenceMessenger.Default.Send<StartScriptMessage, int>(
-                            new(_result.Value.Script), (int)MessageChannels.ScriptStatus);
+                        string scriptPath = _result.Value.Script.Trim('"', '\'');
+                        if (!File.Exists(scriptPath))
+                        {
+                            string relCandidate = Path.Combine(ClientFileSources.SkuaScriptsDIR, scriptPath);
+                            if (File.Exists(relCandidate))
+                                scriptPath = relCandidate;
+                        }
+
+                        if (File.Exists(scriptPath))
+                        {
+                            Trace.WriteLine($"[StartupHandler] Auto-starting script: '{scriptPath}'...");
+                            for (int w = 0; w < 40 && (!_bot.Player.Playing || !_bot.Flash.IsWorldLoaded); w++)
+                            {
+                                await Task.Delay(500);
+                            }
+                            await Task.Delay(2000);
+                            StrongReferenceMessenger.Default.Send<StartScriptMessage, int>(
+                                new(scriptPath), (int)MessageChannels.ScriptStatus);
+                        }
+                        else
+                        {
+                            Trace.WriteLine($"[StartupHandler] Script not found: '{scriptPath}'");
+                        }
                     }
                 }
                 catch (Exception ex)
@@ -1013,6 +1033,27 @@ public sealed class SkuaLinuxStartupHandler : IDisposable
         {
             _bot.Flash.FlashCall += Login;
             _bot.Servers.SetLoginInfo(options.Username, options.Password);
+        }
+        else if (!string.IsNullOrEmpty(options.Script))
+        {
+            _ = Task.Run(async () =>
+            {
+                while (!_bot.Player.Playing || !_bot.Flash.IsWorldLoaded)
+                    await Task.Delay(500);
+                await Task.Delay(2000);
+                string scriptPath = options.Script.Trim('"', '\'');
+                if (!File.Exists(scriptPath))
+                {
+                    string relCandidate = Path.Combine(ClientFileSources.SkuaScriptsDIR, scriptPath);
+                    if (File.Exists(relCandidate))
+                        scriptPath = relCandidate;
+                }
+                if (File.Exists(scriptPath))
+                {
+                    StrongReferenceMessenger.Default.Send<StartScriptMessage, int>(
+                        new(scriptPath), (int)MessageChannels.ScriptStatus);
+                }
+            });
         }
 
         if (!string.IsNullOrEmpty(options.GitHubToken))

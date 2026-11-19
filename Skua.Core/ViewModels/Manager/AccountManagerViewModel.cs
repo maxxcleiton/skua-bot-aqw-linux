@@ -45,6 +45,10 @@ public sealed partial class AccountManagerViewModel : BotControlViewModelBase
         };
         string savedServer = _settingsService.Get<string>("LastServer");
         SelectedServer = ServerList.FirstOrDefault(s => s.Name == savedServer) ?? ServerList[0];
+        string savedScript = _settingsService.Get<string>("LastScriptPath");
+        if (!string.IsNullOrEmpty(savedScript) && File.Exists(savedScript))
+            ScriptPath = savedScript;
+        StartWithScript = _settingsService.Get<bool>("StartWithScript", !string.IsNullOrEmpty(ScriptPath));
         Task.Run(async () => await _GetServers());
         Accounts = new();
         _GetSavedAccounts();
@@ -122,8 +126,27 @@ public sealed partial class AccountManagerViewModel : BotControlViewModelBase
     [ObservableProperty]
     private string _scriptPath = string.Empty;
 
+    partial void OnScriptPathChanged(string value)
+    {
+        if (!string.IsNullOrEmpty(value))
+        {
+            _settingsService.Set("LastScriptPath", value);
+            StartWithScript = true;
+        }
+        else
+        {
+            _settingsService.Set("LastScriptPath", string.Empty);
+            StartWithScript = false;
+        }
+    }
+
     [ObservableProperty]
     private bool _startWithScript;
+
+    partial void OnStartWithScriptChanged(bool value)
+    {
+        _settingsService.Set("StartWithScript", value);
+    }
 
     [ObservableProperty]
     private Server _selectedServer;
@@ -188,11 +211,12 @@ public sealed partial class AccountManagerViewModel : BotControlViewModelBase
         // TODO manage ids for sync in the future
 
         _syncThemes = _settingsService.Get("syncTheme", false);
+        bool runScript = StartWithScript && !string.IsNullOrEmpty(ScriptPath);
         foreach (AccountItemViewModel acc in Accounts)
         {
             if (acc.UseCheck)
             {
-                _LaunchAcc(acc.Username, acc.Password, acc.DisplayName);
+                _LaunchAcc(acc.Username, acc.Password, acc.DisplayName, runScript);
                 await Task.Delay(1000);
             }
         }
@@ -202,9 +226,10 @@ public sealed partial class AccountManagerViewModel : BotControlViewModelBase
     public async Task StartAllAccounts()
     {
         _syncThemes = _settingsService.Get("syncTheme", false);
+        bool runScript = StartWithScript && !string.IsNullOrEmpty(ScriptPath);
         foreach (AccountItemViewModel acc in Accounts)
         {
-            _LaunchAcc(acc.Username, acc.Password, acc.DisplayName);
+            _LaunchAcc(acc.Username, acc.Password, acc.DisplayName, runScript);
             await Task.Delay(1000);
         }
     }
@@ -311,19 +336,21 @@ public sealed partial class AccountManagerViewModel : BotControlViewModelBase
     {
         _syncThemes = _settingsService.Get("syncTheme", false);
 
+        bool runScript = withScript || (StartWithScript && !string.IsNullOrEmpty(ScriptPath));
         if (withScript && string.IsNullOrEmpty(ScriptPath))
         {
             _dialogService.ShowMessageBox("No script selected. Please select a script first.", "No Script");
             return;
         }
 
-        _LaunchAcc(account.Username, account.Password, account.DisplayName, withScript);
+        _LaunchAcc(account.Username, account.Password, account.DisplayName, runScript);
     }
 
     private async void _StartGroup(GroupItemViewModel group, bool withScript)
     {
         _syncThemes = _settingsService.Get("syncTheme", false);
 
+        bool runScript = withScript || (StartWithScript && !string.IsNullOrEmpty(ScriptPath));
         if (withScript && string.IsNullOrEmpty(ScriptPath))
         {
             _dialogService.ShowMessageBox("No script selected. Please select a script first.", "No Script");
@@ -332,7 +359,7 @@ public sealed partial class AccountManagerViewModel : BotControlViewModelBase
 
         foreach (AccountItemViewModel account in group.Accounts)
         {
-            _LaunchAcc(account.Username, account.Password, account.DisplayName, withScript);
+            _LaunchAcc(account.Username, account.Password, account.DisplayName, runScript);
             await Task.Delay(1000);
         }
     }
@@ -361,8 +388,8 @@ public sealed partial class AccountManagerViewModel : BotControlViewModelBase
                 psi.ArgumentList.Add(_settingsService.Get("CurrentTheme", "no-theme"));
             }
 
-            bool shouldUseScript = withScript ?? StartWithScript;
-            if (shouldUseScript)
+            bool shouldUseScript = withScript ?? (StartWithScript && !string.IsNullOrEmpty(ScriptPath));
+            if (shouldUseScript && !string.IsNullOrEmpty(ScriptPath))
             {
                 psi.ArgumentList.Add("--run-script");
                 psi.ArgumentList.Add(ScriptPath);
