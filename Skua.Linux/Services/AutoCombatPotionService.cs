@@ -3,6 +3,7 @@ using System.Dynamic;
 using CommunityToolkit.Mvvm.ComponentModel;
 using Newtonsoft.Json;
 using Skua.Core.Interfaces;
+using Skua.Core.Models.Items;
 
 namespace Skua.Linux.Services;
 
@@ -174,6 +175,14 @@ public sealed class AutoCombatPotionService : IDisposable
                 if (activePotions.Count == 0)
                     continue;
 
+                // If the player currently has a boss mechanic item equipped (e.g. Vigil in Voice in the Sea/Kathool, or Scroll of Enrage),
+                // do not overwrite the potion slot unless that item is explicitly requested.
+                if (_bot.Inventory.IsEquipped("Vigil") && !activePotions.Any(p => p.ItemName.Equals("Vigil", StringComparison.OrdinalIgnoreCase)))
+                {
+                    await Task.Delay(2000, token);
+                    continue;
+                }
+
                 foreach (PotionEntry potion in activePotions)
                 {
                     if (token.IsCancellationRequested)
@@ -192,23 +201,31 @@ public sealed class AutoCombatPotionService : IDisposable
                     if (hasAura)
                         continue;
 
-                    // Aura is expired or not active, try to apply potion
-                    bool hasItem = _bot.Inventory.Contains(potion.ItemName);
+                    // Aura is expired or not active, try to apply potion using exact item name matching
+                    InventoryItem? invItem = _bot.Inventory.Items.FirstOrDefault(i =>
+                        string.Equals(i.Name?.Trim(), potion.ItemName.Trim(), StringComparison.OrdinalIgnoreCase));
+
+                    bool hasItem = invItem is not null;
                     if (!hasItem && AutoPullFromBank)
                     {
-                        if (_bot.Bank.Contains(potion.ItemName))
+                        InventoryItem? bankItem = _bot.Bank.Items.FirstOrDefault(i =>
+                            string.Equals(i.Name?.Trim(), potion.ItemName.Trim(), StringComparison.OrdinalIgnoreCase));
+
+                        if (bankItem is not null)
                         {
-                            _bot.Bank.ToInventory(potion.ItemName);
+                            _bot.Bank.ToInventory(bankItem.Name);
                             await Task.Delay(400, token);
-                            hasItem = _bot.Inventory.Contains(potion.ItemName);
+                            invItem = _bot.Inventory.Items.FirstOrDefault(i =>
+                                string.Equals(i.Name?.Trim(), potion.ItemName.Trim(), StringComparison.OrdinalIgnoreCase));
+                            hasItem = invItem is not null;
                         }
                     }
 
-                    if (!hasItem)
+                    if (!hasItem || invItem is null)
                         continue;
 
-                    // Equip into potion slot
-                    _bot.Inventory.EquipUsableItem(potion.ItemName);
+                    // Equip exact item into potion slot
+                    _bot.Inventory.EquipUsableItem(invItem);
                     await Task.Delay(400, token);
 
                     // Use skill 5 (Potion Slot) using dedicated AS3 usePotion and fallback to UseSkill(5)
@@ -235,16 +252,16 @@ public sealed class AutoCombatPotionService : IDisposable
 
                         if (applied)
                         {
-                            _logger.ScriptLog($"[AutoPotion] Usou '{potion.ItemName}' com sucesso (Aura ativa)!");
+                            _logger.ScriptLog($"[AutoPotion] Usou '{invItem.Name}' com sucesso (Aura ativa)!");
                         }
                         else
                         {
-                            _logger.ScriptLog($"[AutoPotion] Posição atualizada para '{potion.ItemName}', aguardando ativação...");
+                            _logger.ScriptLog($"[AutoPotion] Poção atualizada para '{invItem.Name}', aguardando ativação...");
                         }
                     }
                     catch (Exception ex)
                     {
-                        _logger.ScriptLog($"[AutoPotion] Falha ao usar '{potion.ItemName}': {ex.Message}");
+                        _logger.ScriptLog($"[AutoPotion] Falha ao usar '{invItem.Name}': {ex.Message}");
                     }
 
                     // Delay between multiple potion uses so the client doesn't choke
