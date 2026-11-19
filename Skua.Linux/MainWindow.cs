@@ -38,6 +38,7 @@ public class MainWindow : Window
     private readonly TabControl _rightTabs;
     private bool _isDocked = true;
     private bool _fpsBoostEnabled = false;
+    private bool _isFlashFocused = false;
 
     public MainWindow(IServiceProvider services)
     {
@@ -186,6 +187,7 @@ public class MainWindow : Window
 
         Opened += (_, _) =>
         {
+            EnsureTopLevelXid();
             _bot.Options.LagKiller = false;
             _bot.Flash.InitializeFlash();
         };
@@ -196,16 +198,28 @@ public class MainWindow : Window
         };
     }
 
+    private void EnsureTopLevelXid()
+    {
+        if (TryGetPlatformHandle()?.Handle is IntPtr handle && handle != IntPtr.Zero)
+        {
+            _flashHost.SetTopLevelWindow(handle);
+        }
+    }
+
     private void OnGlobalGotFocus(object? sender, GotFocusEventArgs e)
     {
         if (e.Source is Visual visual && visual != _flashHost)
         {
+            _isFlashFocused = false;
+            EnsureTopLevelXid();
             _flashHost.RestoreParentFocus();
         }
     }
 
     private void OnGlobalPointerPressed(object? sender, PointerPressedEventArgs e)
     {
+        EnsureTopLevelXid();
+
         Visual? source = e.Source as Visual;
         bool isInsideFlash = false;
         while (source != null)
@@ -218,23 +232,31 @@ public class MainWindow : Window
             source = source.GetVisualParent();
         }
 
-        if (!isInsideFlash)
+        if (isInsideFlash)
         {
-            _flashHost.RestoreParentFocus();
+            _isFlashFocused = true;
+            _flashHost.FocusFlashWindow();
         }
         else
         {
-            _flashHost.FocusFlashWindow();
+            _isFlashFocused = false;
+            _flashHost.RestoreParentFocus();
         }
     }
 
     private void OnGlobalKeyDown(object? sender, KeyEventArgs e)
     {
-        var focused = FocusManager?.GetFocusedElement();
-        if (focused is not null && focused != _flashHost)
+        if (!_isFlashFocused)
             return;
 
-        _flashHost.FocusFlashWindow();
+        var focused = FocusManager?.GetFocusedElement();
+        if (focused is not null && focused != _flashHost)
+        {
+            _isFlashFocused = false;
+            _flashHost.RestoreParentFocus();
+            return;
+        }
+
         if (_flashHost.ForwardKey(e.Key, e.KeyModifiers, isPress: true))
         {
             e.Handled = true;
@@ -243,9 +265,16 @@ public class MainWindow : Window
 
     private void OnGlobalKeyUp(object? sender, KeyEventArgs e)
     {
+        if (!_isFlashFocused)
+            return;
+
         var focused = FocusManager?.GetFocusedElement();
         if (focused is not null && focused != _flashHost)
+        {
+            _isFlashFocused = false;
+            _flashHost.RestoreParentFocus();
             return;
+        }
 
         if (_flashHost.ForwardKey(e.Key, e.KeyModifiers, isPress: false))
         {

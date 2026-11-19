@@ -15,6 +15,7 @@ public class X11FlashHost : NativeControlHost
 {
     private IntPtr _display;
     private IntPtr _parentXid;
+    private IntPtr _topLevelXid;
     private IntPtr _containerXid;
     private IntPtr _flashTopLevelXid;
     private int _targetPid;
@@ -263,13 +264,71 @@ public class X11FlashHost : NativeControlHost
         }
     }
 
+    public void SetTopLevelWindow(IntPtr topLevelXid)
+    {
+        _topLevelXid = topLevelXid;
+    }
+
+    private IntPtr GetTopLevelWindow(IntPtr win)
+    {
+        if (_display == IntPtr.Zero || win == IntPtr.Zero)
+            return IntPtr.Zero;
+
+        IntPtr root = XDefaultRootWindow(_display);
+        IntPtr current = win;
+        while (current != IntPtr.Zero && current != root)
+        {
+            if (XQueryTree(_display, current, out _, out IntPtr parent, out IntPtr children, out _) != 0)
+            {
+                if (children != IntPtr.Zero) XFree(children);
+                if (parent == root || parent == IntPtr.Zero)
+                    return current;
+                current = parent;
+            }
+            else
+            {
+                break;
+            }
+        }
+        return win;
+    }
+
     public void RestoreParentFocus()
     {
-        if (_display != IntPtr.Zero && _parentXid != IntPtr.Zero)
+        IntPtr target = _topLevelXid;
+        if (target == IntPtr.Zero && _parentXid != IntPtr.Zero)
+        {
+            target = GetTopLevelWindow(_parentXid);
+            _topLevelXid = target;
+        }
+
+        if (_display != IntPtr.Zero && target != IntPtr.Zero)
         {
             try
             {
-                XSetInputFocus(_display, _parentXid, 2 /* RevertToParent */, IntPtr.Zero);
+                XSetInputFocus(_display, target, 2 /* RevertToParent */, IntPtr.Zero);
+
+                XFocusChangeEvent fev = new()
+                {
+                    type = 9, // FocusIn
+                    serial = 0,
+                    send_event = 0,
+                    display = _display,
+                    window = target,
+                    mode = 0, // NotifyNormal
+                    detail = 0 // NotifyAncestor
+                };
+                IntPtr ptr = Marshal.AllocHGlobal(Marshal.SizeOf<XFocusChangeEvent>());
+                try
+                {
+                    Marshal.StructureToPtr(fev, ptr, false);
+                    XSendEvent(_display, target, false, 1L << 21 /* FocusChangeMask */, ptr);
+                }
+                finally
+                {
+                    Marshal.FreeHGlobal(ptr);
+                }
+
                 XFlush(_display);
             }
             catch { }
