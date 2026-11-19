@@ -234,7 +234,7 @@ public class MainWindow : Window
             {
                 bool loaded = function == "loaded";
                 _flashStatusDot.Fill = loaded ? UiTheme.Green : UiTheme.Blue;
-                _flashStatusBadge.Text = loaded ? "AQW Connected" : "Loading AQW...";
+                _flashStatusBadge.Text = loaded ? $"AQW Connected • {_flashUtil.ActiveEngineShort}" : "Loading AQW...";
                 _flashStatusBadge.Foreground = loaded ? UiTheme.Green : UiTheme.Blue;
                 if (_isDocked && _flashUtil.FlashProcessId is int pid)
                 {
@@ -1373,6 +1373,132 @@ public class MainWindow : Window
                         UiTheme.StyledButton("Load CoreBots Options", "primary").Also(b => b.Command = cboVm.LoadCommand),
                         UiTheme.StyledButton("Save CoreBots Options", "success").Also(b => b.Command = cboVm.SaveCommand)
                     }
+                }
+            }
+        }));
+
+        // Flash Engine / Runtime Card
+        ISettingsService settingsSvc = _services.GetRequiredService<ISettingsService>();
+        string currentEngine = settingsSvc.Get<string>("LinuxFlashEngine", "Ruffle") ?? "Ruffle";
+        string currentGfx = settingsSvc.Get<string>("LinuxRuffleGraphics", "vulkan") ?? "vulkan";
+        string currentFps = settingsSvc.Get<string>("LinuxRuffleFps", "60") ?? "60";
+
+        ComboBox engineCombo = new()
+        {
+            ItemsSource = new string[] { "The BattleOn Engine (Ruffle Vulkan - 60 FPS)", "Adobe Flash Player (Legado)" },
+            SelectedIndex = currentEngine.Equals("AdobeFlash", StringComparison.OrdinalIgnoreCase) ? 1 : 0,
+            Width = 340
+        };
+        engineCombo.SelectionChanged += (_, _) =>
+        {
+            string chosen = engineCombo.SelectedIndex == 1 ? "AdobeFlash" : "Ruffle";
+            settingsSvc.Set("LinuxFlashEngine", chosen);
+        };
+
+        ComboBox gfxCombo = new()
+        {
+            ItemsSource = new string[] { "Vulkan (GPU Acelerada - Recomendado)", "OpenGL", "Padrão do Sistema" },
+            SelectedIndex = currentGfx switch
+            {
+                "gl" => 1,
+                "default" => 2,
+                _ => 0
+            },
+            Width = 260
+        };
+        gfxCombo.SelectionChanged += (_, _) =>
+        {
+            string chosen = gfxCombo.SelectedIndex switch
+            {
+                1 => "gl",
+                2 => "default",
+                _ => "vulkan"
+            };
+            settingsSvc.Set("LinuxRuffleGraphics", chosen);
+        };
+
+        ComboBox fpsCombo = new()
+        {
+            ItemsSource = new string[] { "60 FPS (Padrão)", "120 FPS", "144 FPS", "Taxa do Monitor (Display Refresh)" },
+            SelectedIndex = currentFps switch
+            {
+                "120" => 1,
+                "144" => 2,
+                "display" => 3,
+                _ => 0
+            },
+            Width = 240
+        };
+        fpsCombo.SelectionChanged += (_, _) =>
+        {
+            string chosen = fpsCombo.SelectedIndex switch
+            {
+                1 => "120",
+                2 => "144",
+                3 => "display",
+                _ => "60"
+            };
+            settingsSvc.Set("LinuxRuffleFps", chosen);
+        };
+
+        TextBlock activeRuntimeStatus = new()
+        {
+            Text = $"Motor em execução agora: {_flashUtil.ActiveEngine}",
+            Foreground = UiTheme.Teal,
+            FontSize = 11.5,
+            FontStyle = FontStyle.Italic
+        };
+
+        panel.Children.Add(UiTheme.Card(new StackPanel
+        {
+            Spacing = 8,
+            Children =
+            {
+                UiTheme.SectionTitle("⚡ Motor Gráfico Flash & BattleOn Engine", UiTheme.Yellow),
+                activeRuntimeStatus,
+                new WrapPanel
+                {
+                    Orientation = Orientation.Horizontal,
+                    Children =
+                    {
+                        new StackPanel
+                        {
+                            Spacing = 3,
+                            Margin = new Thickness(0, 0, 10, 8),
+                            Children =
+                            {
+                                new TextBlock { Text = "Engine Flash:", FontSize = 11, Foreground = UiTheme.TextMuted },
+                                engineCombo
+                            }
+                        },
+                        new StackPanel
+                        {
+                            Spacing = 3,
+                            Margin = new Thickness(0, 0, 10, 8),
+                            Children =
+                            {
+                                new TextBlock { Text = "Backend Gráfico (Ruffle):", FontSize = 11, Foreground = UiTheme.TextMuted },
+                                gfxCombo
+                            }
+                        },
+                        new StackPanel
+                        {
+                            Spacing = 3,
+                            Margin = new Thickness(0, 0, 10, 8),
+                            Children =
+                            {
+                                new TextBlock { Text = "Limite de FPS:", FontSize = 11, Foreground = UiTheme.TextMuted },
+                                fpsCombo
+                            }
+                        }
+                    }
+                },
+                new TextBlock
+                {
+                    Text = "ℹ️ Dica: A troca de engine passa a valer na próxima vez que o cliente ou nova conta for aberta.",
+                    Foreground = UiTheme.TextMuted,
+                    FontSize = 11,
+                    Margin = new Thickness(0, 4, 0, 0)
                 }
             }
         }));

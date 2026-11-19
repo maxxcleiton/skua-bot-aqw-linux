@@ -18,6 +18,7 @@ public class LinuxFlashUtil : IFlashUtil
 {
     private readonly IMessenger _messenger;
     private readonly Lazy<IScriptManager> _lazyManager;
+    private readonly ISettingsService? _settingsService;
     private TcpListener? _listener;
     private TcpClient? _client;
     private NetworkStream? _stream;
@@ -33,11 +34,14 @@ public class LinuxFlashUtil : IFlashUtil
 
     public int? FlashProcessId => _flashProcess is { HasExited: false } ? _flashProcess.Id : null;
     public bool IsConnected => _client?.Connected == true;
+    public string ActiveEngine { get; private set; } = "Detecting...";
+    public string ActiveEngineShort => ActiveEngine.Contains("Ruffle", StringComparison.OrdinalIgnoreCase) ? "Ruffle Vulkan" : "Adobe Flash";
 
-    public LinuxFlashUtil(IMessenger messenger, Lazy<IScriptManager> manager)
+    public LinuxFlashUtil(IMessenger messenger, Lazy<IScriptManager> manager, ISettingsService? settingsService = null)
     {
         _messenger = messenger;
         _lazyManager = manager;
+        _settingsService = settingsService;
     }
 
     public void InitializeFlash()
@@ -90,22 +94,49 @@ public class LinuxFlashUtil : IFlashUtil
                 sessionSwf = swfPath;
             }
 
-            string? playerBin = ResolveFlashPlayerBinary();
-            if (playerBin is null)
-            {
-                Trace.WriteLine("[LinuxFlashUtil] flashplayer binary not found.");
-                return;
-            }
+            string configuredEngine = _settingsService?.Get<string>("LinuxFlashEngine", "Ruffle") ?? "Ruffle";
+            string? ruffleBin = ResolveRuffleBinary();
+            string? adobeBin = ResolveFlashPlayerBinary();
 
-            ProcessStartInfo psi = new()
+            ProcessStartInfo psi;
+
+            if (configuredEngine.Equals("Ruffle", StringComparison.OrdinalIgnoreCase) && !string.IsNullOrEmpty(ruffleBin))
             {
-                FileName = playerBin,
-                Arguments = $"\"{sessionSwf}\"",
-                WorkingDirectory = _sessionDir,
-                UseShellExecute = false
-            };
-            psi.Environment["GDK_BACKEND"] = "x11";
-            psi.Environment["vblank_mode"] = "0";
+                ActiveEngine = "The BattleOn Engine (Ruffle Vulkan)";
+                Trace.WriteLine($"[LinuxFlashUtil] Launching BattleOn Engine (Ruffle): {ruffleBin}");
+
+                string graphics = _settingsService?.Get<string>("LinuxRuffleGraphics", "vulkan") ?? "vulkan";
+                string fps = _settingsService?.Get<string>("LinuxRuffleFps", "60") ?? "60";
+
+                psi = new ProcessStartInfo
+                {
+                    FileName = ruffleBin,
+                    Arguments = $"--no-gui --tcp-connections allow --socket-allow 127.0.0.1:{port} --base \"file://{_sessionDir}/\" --storage disk --graphics {graphics} --max-render-rate {fps} --power high \"{sessionSwf}\"",
+                    WorkingDirectory = _sessionDir,
+                    UseShellExecute = false
+                };
+
+                psi.Environment["WINIT_UNIX_BACKEND"] = "x11";
+                psi.Environment.Remove("WAYLAND_DISPLAY");
+                psi.Environment["DISPLAY"] = Environment.GetEnvironmentVariable("DISPLAY") ?? ":1";
+                psi.Environment["vblank_mode"] = "0";
+            }
+            else
+            {
+                ActiveEngine = "Adobe Flash Player (Legacy)";
+                string playerBin = adobeBin ?? "flashplayer";
+                Trace.WriteLine($"[LinuxFlashUtil] Launching Adobe Flash Player: {playerBin}");
+
+                psi = new ProcessStartInfo
+                {
+                    FileName = playerBin,
+                    Arguments = $"\"{sessionSwf}\"",
+                    WorkingDirectory = _sessionDir,
+                    UseShellExecute = false
+                };
+                psi.Environment["GDK_BACKEND"] = "x11";
+                psi.Environment["vblank_mode"] = "0";
+            }
 
             _flashProcess = Process.Start(psi);
             if (_flashProcess is not null)
@@ -119,7 +150,29 @@ public class LinuxFlashUtil : IFlashUtil
         }
     }
 
-    private static string? ResolveFlashPlayerBinary()
+    public static string? ResolveRuffleBinary()
+    {
+        string home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+        string[] candidates =
+        {
+            Path.Combine(AppContext.BaseDirectory, "ruffle_desktop"),
+            Path.Combine(home, ".local", "bin", "ruffle_desktop"),
+            "/home/max/coding/Skua-Linux/.tools/ruffle/ruffle_desktop",
+            Path.Combine(AppContext.BaseDirectory, "tools", "ruffle", "ruffle_desktop"),
+            "/usr/bin/ruffle_desktop",
+            "/usr/local/bin/ruffle_desktop"
+        };
+
+        foreach (string c in candidates)
+        {
+            if (File.Exists(c))
+                return c;
+        }
+
+        return null;
+    }
+
+    public static string? ResolveFlashPlayerBinary()
     {
         string home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
         string[] candidates =

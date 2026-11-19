@@ -20,7 +20,7 @@ public class X11FlashHost : NativeControlHost
     private int _targetPid;
     private bool _wantEmbedded;
     private bool _isEmbedded;
-    private int _chromeHeight = 56;
+    private int _chromeHeight = 0;
     private DispatcherTimer? _embedTimer;
     private DispatcherTimer? _watchdogTimer;
 
@@ -319,6 +319,10 @@ public class X11FlashHost : NativeControlHost
             {
                 _chromeHeight = detectedChrome;
             }
+            else
+            {
+                _chromeHeight = 0;
+            }
 
             IntPtr currentParent = GetParentWindow(_display, _flashTopLevelXid, out IntPtr actualRoot);
             if (currentParent == IntPtr.Zero)
@@ -419,6 +423,10 @@ public class X11FlashHost : NativeControlHost
             if (detectedChrome >= 20 && detectedChrome <= 110)
             {
                 _chromeHeight = detectedChrome;
+            }
+            else
+            {
+                _chromeHeight = 0;
             }
 
             (uint w, uint h) = GetTargetContainerSize();

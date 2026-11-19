@@ -18,6 +18,10 @@ dotnet build Skua.Linux/Skua.Linux.csproj -p:WarningLevel=0
 OUT_DIR="$DIR/Skua.Linux/bin/Debug/net10.0"
 cp -f "$DIR/Skua.AS3/skua/bin/skua.swf" "$OUT_DIR/skua.swf"
 ln -sfn "$DIR/FFDec" "$OUT_DIR/FFDec"
+if [ -f "$DIR/.tools/ruffle/ruffle_desktop" ]; then
+    cp -f "$DIR/.tools/ruffle/ruffle_desktop" "$OUT_DIR/ruffle_desktop"
+    chmod +x "$OUT_DIR/ruffle_desktop"
+fi
 mkdir -p "$OUT_DIR/Assets"
 cp -f "$DIR/Assets/SkuaIcon.png" "$OUT_DIR/Assets/SkuaIcon.png"
 cp -f "$DIR/Assets/SkuaIcon.png" "$OUT_DIR/SkuaIcon.png"

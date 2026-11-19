@@ -1116,6 +1116,17 @@ public sealed class SkuaLinuxStartupHandler : IDisposable
             });
         }
 
+        if (!string.IsNullOrEmpty(options.Engine) && !options.Engine.Equals("auto", StringComparison.OrdinalIgnoreCase))
+        {
+            string engineValue = options.Engine.ToLowerInvariant() switch
+            {
+                "ruffle" or "battleon" or "vulkan" => "Ruffle",
+                "flash" or "adobe" or "legacy" => "AdobeFlash",
+                _ => options.Engine
+            };
+            _settingsService.Set("LinuxFlashEngine", engineValue);
+        }
+
         if (!string.IsNullOrEmpty(options.GitHubToken))
             _settingsService.Set("UserGitHubToken", options.GitHubToken);
 
@@ -1141,6 +1152,9 @@ public sealed class SkuaLinuxOptions
 
     [Option('s', "server", Default = "Twilly")]
     public string Server { get; set; } = "Twilly";
+
+    [Option("engine", Default = "auto", HelpText = "Flash runtime engine: auto, ruffle, flash")]
+    public string Engine { get; set; } = "auto";
 
     [Option("run-script")]
     public string? Script { get; set; }
