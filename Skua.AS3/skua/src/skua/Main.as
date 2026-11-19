@@ -359,7 +359,7 @@ public class Main extends MovieClip {
         var funcName:String = parts.pop();
         var obj:* = _getObjectA(instance.game, parts);
         var func:Function = obj[funcName] as Function;
-        return JSON.stringify(func.apply(null, args));
+        return JSON.stringify(func.apply(obj, args));
     }
 
     public static function callGameFunction0(path:String):String {
@@ -367,7 +367,7 @@ public class Main extends MovieClip {
         var funcName:String = parts.pop();
         var obj:* = _getObjectA(instance.game, parts);
         var func:Function = obj[funcName] as Function;
-        return JSON.stringify(func.apply());
+        return JSON.stringify(func.apply(obj));
     }
 
     public static function selectArrayObjects(path:String, selector:String):String {

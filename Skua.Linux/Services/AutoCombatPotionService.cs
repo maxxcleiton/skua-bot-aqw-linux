@@ -209,25 +209,38 @@ public sealed class AutoCombatPotionService : IDisposable
 
                     // Equip into potion slot
                     _bot.Inventory.EquipUsableItem(potion.ItemName);
-                    await Task.Delay(350, token);
+                    await Task.Delay(400, token);
 
-                    // Use skill 5 (Potion Slot)
+                    // Use skill 5 (Potion Slot) using dedicated AS3 usePotion and fallback to UseSkill(5)
                     try
                     {
-                        var skill = _bot.Flash.GetArrayObject<dynamic>("world.actions.active", 5);
-                        if (skill != null)
+                        _bot.Flash.Call("usePotion");
+                        _bot.Skills.UseSkill(5);
+
+                        bool applied = false;
+                        for (int attempt = 0; attempt < 4; attempt++)
                         {
-                            _bot.Flash.CallGameFunction(
-                                "world.testAction",
-                                JsonConvert.DeserializeObject<ExpandoObject>(JsonConvert.SerializeObject(skill))
-                            );
+                            await Task.Delay(300, token);
+                            if (potion.AuraAliases.Any(a => _bot.Self.HasActiveAura(a)))
+                            {
+                                applied = true;
+                                break;
+                            }
+                            if (attempt == 1)
+                            {
+                                _bot.Flash.Call("usePotion");
+                                _bot.Skills.UseSkill(5);
+                            }
+                        }
+
+                        if (applied)
+                        {
+                            _logger.ScriptLog($"[AutoPotion] Usou '{potion.ItemName}' com sucesso (Aura ativa)!");
                         }
                         else
                         {
-                            _bot.Skills.UseSkill(5);
+                            _logger.ScriptLog($"[AutoPotion] Posição atualizada para '{potion.ItemName}', aguardando ativação...");
                         }
-
-                        _logger.ScriptLog($"[AutoPotion] Usou '{potion.ItemName}' com sucesso!");
                     }
                     catch (Exception ex)
                     {

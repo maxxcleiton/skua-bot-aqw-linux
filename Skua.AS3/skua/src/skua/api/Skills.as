@@ -95,5 +95,22 @@ public class Skills {
 
         return false.toString();
     }
+
+    public static function usePotion():String {
+        var world:* = Main.instance.game.world;
+        if (world == null || world.actions == null || world.actions.active == null) {
+            return false.toString();
+        }
+        var skill:* = world.actions.active[5];
+        if (skill == null) {
+            return false.toString();
+        }
+        world.lockdownPots = false;
+        if (skill.hasOwnProperty("OldCD")) {
+            delete skill.OldCD;
+        }
+        world.testAction(skill);
+        return true.toString();
+    }
 }
 }
