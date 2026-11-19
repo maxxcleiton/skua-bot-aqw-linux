@@ -38,6 +38,8 @@ public static class ConfigureLinuxServices
         services.AddSingleton<ISoundService, LinuxSoundService>();
         services.AddSingleton<BackgroundThemeService>();
         services.AddSingleton<AutoCombatPotionService>();
+        services.AddSingleton<ScriptQueueService>();
+        services.AddSingleton<AccountSchedulerService>();
 
         return services;
     }
@@ -988,7 +990,28 @@ public sealed class SkuaLinuxStartupHandler : IDisposable
                         }
                     }
 
-                    if (!string.IsNullOrEmpty(_result.Value.Script))
+                    if (!string.IsNullOrEmpty(_result.Value.Queue))
+                    {
+                        Trace.WriteLine($"[StartupHandler] Auto-starting queue: '{_result.Value.Queue}'...");
+                        for (int w = 0; w < 40 && (!_bot.Player.Playing || !_bot.Flash.IsWorldLoaded); w++)
+                        {
+                            await Task.Delay(500);
+                        }
+                        await Task.Delay(2000);
+                        try
+                        {
+                            var queueService = CommunityToolkit.Mvvm.DependencyInjection.Ioc.Default.GetRequiredService<ScriptQueueService>();
+                            queueService.LoadPreset(_result.Value.Queue);
+                            if (_result.Value.AutoClose)
+                                queueService.AutoCloseWhenFinished = true;
+                            queueService.StartQueue();
+                        }
+                        catch (Exception qEx)
+                        {
+                            Trace.WriteLine($"[StartupHandler] Erro ao carregar fila: {qEx.Message}");
+                        }
+                    }
+                    else if (!string.IsNullOrEmpty(_result.Value.Script))
                     {
                         string scriptPath = _result.Value.Script.Trim('"', '\'');
                         if (!File.Exists(scriptPath))
@@ -1006,6 +1029,18 @@ public sealed class SkuaLinuxStartupHandler : IDisposable
                                 await Task.Delay(500);
                             }
                             await Task.Delay(2000);
+
+                            if (_result.Value.AutoClose)
+                            {
+                                StrongReferenceMessenger.Default.Register<SkuaLinuxStartupHandler, ScriptStoppedMessage, int>(
+                                    this, (int)MessageChannels.ScriptStatus, async (r, _) =>
+                                    {
+                                        Trace.WriteLine("[StartupHandler] Script concluído com --auto-close. Fechando cliente em 3s...");
+                                        await Task.Delay(3000);
+                                        Environment.Exit(0);
+                                    });
+                            }
+
                             StrongReferenceMessenger.Default.Send<StartScriptMessage, int>(
                                 new(scriptPath), (int)MessageChannels.ScriptStatus);
                         }
@@ -1034,6 +1069,20 @@ public sealed class SkuaLinuxStartupHandler : IDisposable
             _bot.Flash.FlashCall += Login;
             _bot.Servers.SetLoginInfo(options.Username, options.Password);
         }
+        else if (!string.IsNullOrEmpty(options.Queue))
+        {
+            _ = Task.Run(async () =>
+            {
+                while (!_bot.Player.Playing || !_bot.Flash.IsWorldLoaded)
+                    await Task.Delay(500);
+                await Task.Delay(2000);
+                var queueService = CommunityToolkit.Mvvm.DependencyInjection.Ioc.Default.GetRequiredService<ScriptQueueService>();
+                queueService.LoadPreset(options.Queue);
+                if (options.AutoClose)
+                    queueService.AutoCloseWhenFinished = true;
+                queueService.StartQueue();
+            });
+        }
         else if (!string.IsNullOrEmpty(options.Script))
         {
             _ = Task.Run(async () =>
@@ -1050,6 +1099,17 @@ public sealed class SkuaLinuxStartupHandler : IDisposable
                 }
                 if (File.Exists(scriptPath))
                 {
+                    if (options.AutoClose)
+                    {
+                        StrongReferenceMessenger.Default.Register<SkuaLinuxStartupHandler, ScriptStoppedMessage, int>(
+                            this, (int)MessageChannels.ScriptStatus, async (r, _) =>
+                            {
+                                Trace.WriteLine("[StartupHandler] Script concluído com --auto-close. Fechando cliente em 3s...");
+                                await Task.Delay(3000);
+                                Environment.Exit(0);
+                            });
+                    }
+
                     StrongReferenceMessenger.Default.Send<StartScriptMessage, int>(
                         new(scriptPath), (int)MessageChannels.ScriptStatus);
                 }
@@ -1084,6 +1144,12 @@ public sealed class SkuaLinuxOptions
 
     [Option("run-script")]
     public string? Script { get; set; }
+
+    [Option("run-queue")]
+    public string? Queue { get; set; }
+
+    [Option("auto-close")]
+    public bool AutoClose { get; set; }
 
     [Option("use-theme")]
     public string? UseTheme { get; set; }

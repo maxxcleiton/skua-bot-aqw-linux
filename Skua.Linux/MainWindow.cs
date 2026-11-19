@@ -254,13 +254,15 @@ public class MainWindow : Window
         int idx = key.ToLowerInvariant() switch
         {
             "scripts" or "load script" => 0,
-            "script repo" or "search scripts" => 1,
-            "runtime" or "current drops" or "notify drop" => 2,
-            "grabber" => 3,
-            "loader" or "jump" or "auto" or "fast travel" => 4,
-            "logger" or "spammer" or "interceptor" => 5,
-            "game" or "application" or "corebots" => 6,
-            "console" or "logs" or "stats" => 7,
+            "queue" or "fila" or "pipeline" => 1,
+            "script repo" or "search scripts" => 2,
+            "runtime" or "current drops" or "notify drop" => 3,
+            "accounts" or "manager" => 4,
+            "grabber" => 5,
+            "loader" or "jump" or "auto" or "fast travel" => 6,
+            "logger" or "spammer" or "interceptor" => 7,
+            "game" or "application" or "corebots" => 8,
+            "console" or "logs" or "stats" => 9,
             _ => -1
         };
         if (idx >= 0 && idx < _rightTabs.ItemCount)
@@ -508,6 +510,7 @@ public class MainWindow : Window
             ItemsSource = new TabItem[]
             {
                 new() { Header = "Scripts", Content = BuildScriptsTab() },
+                new() { Header = "Queue", Content = ScriptQueueTab.BuildQueueTab(_services) },
                 new() { Header = "Repo", Content = BuildScriptRepoTab() },
                 new() { Header = "Runtime", Content = RuntimeAndTravelTabs.BuildRuntimeTab(_services) },
                 new() { Header = "Accounts", Content = AccountsTab.BuildAccountsTab(_services) },

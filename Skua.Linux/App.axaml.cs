@@ -83,6 +83,8 @@ public partial class App : Application
             Services.GetRequiredService<IFlashUtil>().Dispose();
             Services.GetRequiredService<ICaptureProxy>().Stop();
             Services.GetService<AutoCombatPotionService>()?.Dispose();
+            Services.GetService<ScriptQueueService>()?.Dispose();
+            Services.GetService<AccountSchedulerService>()?.Dispose();
             _syncPlugin?.Dispose();
             await ((IAsyncDisposable)Services.GetRequiredService<IScriptBoost>()).DisposeAsync();
             await ((IAsyncDisposable)Services.GetRequiredService<IScriptBotStats>()).DisposeAsync();

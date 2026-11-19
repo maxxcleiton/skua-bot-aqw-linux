@@ -6,15 +6,31 @@ using Avalonia.Data;
 using Avalonia.Layout;
 using Avalonia.Media;
 using Microsoft.Extensions.DependencyInjection;
+using Skua.Core.Interfaces;
+using Skua.Core.Models;
 using Skua.Core.Models.Servers;
+using Skua.Core.Utils;
 using Skua.Core.ViewModels;
 using Skua.Core.ViewModels.Manager;
+using Skua.Linux.Services;
 
 namespace Skua.Linux.UI;
 
 internal static class AccountsTab
 {
     public static Control BuildAccountsTab(IServiceProvider services)
+    {
+        return new TabControl
+        {
+            ItemsSource = new TabItem[]
+            {
+                new() { Header = "👥 Contas & Grupos", Content = BuildAccountsView(services) },
+                new() { Header = "⏰ Agendador Diário", Content = BuildSchedulerView(services) }
+            }
+        };
+    }
+
+    private static Control BuildAccountsView(IServiceProvider services)
     {
         AccountManagerViewModel vm = services.GetRequiredService<AccountManagerViewModel>();
         vm.IsActive = true;
@@ -399,5 +415,327 @@ internal static class AccountsTab
         mainGrid.Children.Add(accountsList);
 
         return mainGrid;
+    }
+
+    private static Control BuildSchedulerView(IServiceProvider services)
+    {
+        AccountSchedulerService scheduler = services.GetRequiredService<AccountSchedulerService>();
+        AccountManagerViewModel vm = services.GetRequiredService<AccountManagerViewModel>();
+        IFileDialogService fileDialog = services.GetRequiredService<IFileDialogService>();
+        ScriptQueueService queueService = services.GetRequiredService<ScriptQueueService>();
+
+        ScrollViewer scrollViewer = new()
+        {
+            VerticalScrollBarVisibility = Avalonia.Controls.Primitives.ScrollBarVisibility.Auto,
+            HorizontalScrollBarVisibility = Avalonia.Controls.Primitives.ScrollBarVisibility.Disabled
+        };
+
+        StackPanel mainPanel = new()
+        {
+            Spacing = 10,
+            Margin = new Thickness(8)
+        };
+
+        // 1. Scheduler Status Card
+        StackPanel statusStack = new() { Spacing = 6 };
+        TextBlock statusBadge = new()
+        {
+            Text = scheduler.IsActive ? "🟢 Monitorando Horários Diários" : "⏸ Agendador Pausado",
+            Foreground = scheduler.IsActive ? UiTheme.Green : UiTheme.Yellow,
+            FontWeight = FontWeight.Bold,
+            FontSize = 12.5,
+            VerticalAlignment = VerticalAlignment.Center
+        };
+
+        Button toggleSchedulerBtn = UiTheme.StyledButton(scheduler.IsActive ? "Pausar" : "Ativar", "subtle");
+        toggleSchedulerBtn.Click += (_, _) =>
+        {
+            if (scheduler.IsActive)
+                scheduler.StopMonitor();
+            else
+                scheduler.StartMonitor();
+
+            statusBadge.Text = scheduler.IsActive ? "🟢 Monitorando Horários Diários" : "⏸ Agendador Pausado";
+            statusBadge.Foreground = scheduler.IsActive ? UiTheme.Green : UiTheme.Yellow;
+            toggleSchedulerBtn.Content = scheduler.IsActive ? "Pausar" : "Ativar";
+        };
+
+        DockPanel statusDock = new()
+        {
+            Children =
+            {
+                UiTheme.SectionTitle("⏰ Agendador Diário de Contas & Scripts", UiTheme.Mauve),
+                new StackPanel
+                {
+                    Orientation = Orientation.Horizontal,
+                    Spacing = 8,
+                    HorizontalAlignment = HorizontalAlignment.Right,
+                    Children = { statusBadge, toggleSchedulerBtn }
+                }
+            }
+        };
+        statusStack.Children.Add(statusDock);
+
+        TextBlock descText = new()
+        {
+            Text = "Abra e execute automaticamente tarefas diárias em horários programados (ex: 04:00 após o reset do AQW).",
+            Foreground = UiTheme.TextDim,
+            FontSize = 11.5
+        };
+        statusStack.Children.Add(descText);
+        mainPanel.Children.Add(UiTheme.Card(statusStack));
+
+        // 2. Add New Scheduled Task Card
+        StackPanel addPanel = new() { Spacing = 8 };
+        addPanel.Children.Add(UiTheme.SectionTitle("➕ Nova Tarefa Agendada", UiTheme.Blue));
+
+        ComboBox accountCombo = new()
+        {
+            ItemsSource = vm.Accounts,
+            Width = 180,
+            FontSize = 11.5,
+            ItemTemplate = new FuncDataTemplate<AccountItemViewModel>((a, _) =>
+                new TextBlock { Text = !string.IsNullOrEmpty(a?.DisplayName) ? a.DisplayName : a?.Username ?? "" })
+        };
+        if (vm.Accounts.Count > 0)
+            accountCombo.SelectedIndex = 0;
+
+        ComboBox serverCombo = new()
+        {
+            ItemsSource = vm.ServerList,
+            Width = 140,
+            FontSize = 11.5,
+            ItemTemplate = new FuncDataTemplate<Server>((s, _) =>
+                new TextBlock { Text = s?.Name ?? "" })
+        };
+        if (vm.ServerList.Count > 0)
+            serverCombo.SelectedIndex = 0;
+
+        TextBox timeBox = new()
+        {
+            Text = "04:00",
+            Watermark = "HH:mm",
+            Width = 70,
+            FontSize = 11.5,
+            VerticalAlignment = VerticalAlignment.Center
+        };
+
+        TextBlock timeLabel = new()
+        {
+            Text = "Horário:",
+            FontSize = 11,
+            Foreground = UiTheme.TextMuted,
+            VerticalAlignment = VerticalAlignment.Center,
+            Margin = new Thickness(6, 0, 2, 0)
+        };
+
+        WrapPanel row1 = new()
+        {
+            Children =
+            {
+                new TextBlock { Text = "Conta:", FontSize = 11, Foreground = UiTheme.TextMuted, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0,0,4,0) },
+                accountCombo,
+                new TextBlock { Text = "Servidor:", FontSize = 11, Foreground = UiTheme.TextMuted, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(8,0,4,0) },
+                serverCombo,
+                timeLabel,
+                timeBox
+            }
+        };
+        addPanel.Children.Add(row1);
+
+        ComboBox modeCombo = new()
+        {
+            ItemsSource = new[] { "Script (.cs)", "Fila de Scripts" },
+            SelectedIndex = 0,
+            Width = 140,
+            FontSize = 11.5
+        };
+
+        TextBox targetBox = new()
+        {
+            Watermark = "Caminho do Script (.cs) ou Nome da Fila...",
+            HorizontalAlignment = HorizontalAlignment.Stretch,
+            FontSize = 11.5
+        };
+
+        Button browseTargetBtn = UiTheme.StyledButton("📂 Selecionar", "subtle");
+        browseTargetBtn.Click += (_, _) =>
+        {
+            if (modeCombo.SelectedIndex == 0)
+            {
+                string? file = fileDialog.OpenFile(ClientFileSources.SkuaScriptsDIR, "C# Scripts (*.cs)|*.cs|All Files (*.*)|*.*");
+                if (!string.IsNullOrEmpty(file))
+                    targetBox.Text = file;
+            }
+            else
+            {
+                queueService.RefreshPresets();
+                if (queueService.SavedPresets.Count > 0)
+                    targetBox.Text = queueService.SavedPresets[0];
+            }
+        };
+
+        Grid targetGrid = new()
+        {
+            ColumnDefinitions = new ColumnDefinitions("Auto,*,Auto")
+        };
+        Grid.SetColumn(modeCombo, 0);
+        Grid.SetColumn(targetBox, 1);
+        Grid.SetColumn(browseTargetBtn, 2);
+        targetGrid.Children.Add(modeCombo);
+        targetGrid.Children.Add(targetBox);
+        targetGrid.Children.Add(browseTargetBtn);
+        addPanel.Children.Add(targetGrid);
+
+        CheckBox autoCloseCheck = new()
+        {
+            Content = "Fechar cliente ao terminar toda a execução (--auto-close)",
+            FontSize = 11.5,
+            IsChecked = true,
+            VerticalAlignment = VerticalAlignment.Center
+        };
+
+        Button addTaskBtn = UiTheme.StyledButton("➕ Agendar Tarefa", "primary");
+        addTaskBtn.Background = UiTheme.Blue;
+        addTaskBtn.Foreground = Brushes.Black;
+        addTaskBtn.FontWeight = FontWeight.Bold;
+        addTaskBtn.Click += (_, _) =>
+        {
+            string accountName = (accountCombo.SelectedItem as AccountItemViewModel)?.DisplayName
+                                 ?? (accountCombo.SelectedItem as AccountItemViewModel)?.Username
+                                 ?? string.Empty;
+
+            if (string.IsNullOrWhiteSpace(accountName) || string.IsNullOrWhiteSpace(targetBox.Text))
+                return;
+
+            string serverName = (serverCombo.SelectedItem as Server)?.Name ?? "Twilly";
+            string mode = modeCombo.SelectedIndex == 1 ? "Queue" : "Script";
+
+            scheduler.AddTask(new ScheduledTask
+            {
+                AccountName = accountName,
+                Server = serverName,
+                ScheduledTime = timeBox.Text?.Trim() ?? "04:00",
+                Mode = mode,
+                TargetPath = targetBox.Text.Trim(),
+                AutoClose = autoCloseCheck.IsChecked ?? true,
+                IsEnabled = true
+            });
+
+            targetBox.Text = string.Empty;
+        };
+
+        DockPanel actionDock = new()
+        {
+            Children =
+            {
+                addTaskBtn,
+                autoCloseCheck
+            }
+        };
+        DockPanel.SetDock(addTaskBtn, Dock.Right);
+        addPanel.Children.Add(actionDock);
+
+        mainPanel.Children.Add(UiTheme.Card(addPanel));
+
+        // 3. Tasks List Card
+        StackPanel tasksListPanel = new() { Spacing = 8 };
+        tasksListPanel.Children.Add(UiTheme.SectionTitle("Tarefas Agendadas", UiTheme.Yellow));
+
+        ListBox tasksList = new()
+        {
+            ItemsSource = scheduler.Tasks,
+            Background = Brushes.Transparent,
+            BorderThickness = new Thickness(0),
+            ItemTemplate = new FuncDataTemplate<ScheduledTask>((task, _) =>
+            {
+                Border card = new()
+                {
+                    Background = UiTheme.BgSurface,
+                    BorderBrush = UiTheme.BorderSubtle,
+                    BorderThickness = new Thickness(1),
+                    CornerRadius = new CornerRadius(6),
+                    Padding = new Thickness(8, 6),
+                    Margin = new Thickness(0, 2)
+                };
+
+                Grid row = new()
+                {
+                    ColumnDefinitions = new ColumnDefinitions("Auto,*,Auto")
+                };
+
+                CheckBox enableBox = new()
+                {
+                    IsChecked = task.IsEnabled,
+                    VerticalAlignment = VerticalAlignment.Center,
+                    Margin = new Thickness(0, 0, 8, 0)
+                };
+                enableBox.IsCheckedChanged += (_, _) =>
+                {
+                    task.IsEnabled = enableBox.IsChecked ?? false;
+                    scheduler.SaveTasks();
+                };
+
+                StackPanel infoStack = new() { Spacing = 2 };
+                WrapPanel badges = new() { Margin = new Thickness(0, 2) };
+                badges.Children.Add(UiTheme.Badge($"⏰ {task.ScheduledTime}", UiTheme.Yellow));
+                badges.Children.Add(UiTheme.Badge($"👤 {task.AccountName}", UiTheme.Mauve));
+                badges.Children.Add(UiTheme.Badge($"🌐 {task.Server}", UiTheme.Teal));
+                if (task.AutoClose)
+                    badges.Children.Add(UiTheme.Badge("AutoClose", UiTheme.TextDim));
+
+                TextBlock targetText = new()
+                {
+                    Text = $"{(task.Mode == "Queue" ? "📋 Fila" : "📜 Script")}: {task.TargetPath}",
+                    FontWeight = FontWeight.SemiBold,
+                    FontSize = 12,
+                    Foreground = UiTheme.TextPrimary
+                };
+
+                TextBlock lastRunText = new()
+                {
+                    Text = $"Última execução: {task.LastRun}",
+                    FontSize = 10.5,
+                    Foreground = UiTheme.TextMuted
+                };
+
+                infoStack.Children.Add(badges);
+                infoStack.Children.Add(targetText);
+                infoStack.Children.Add(lastRunText);
+
+                StackPanel actions = new()
+                {
+                    Orientation = Orientation.Horizontal,
+                    Spacing = 4,
+                    VerticalAlignment = VerticalAlignment.Center
+                };
+
+                Button runNowBtn = UiTheme.StyledButton("▶ Testar Agora", "subtle");
+                runNowBtn.Click += (_, _) => scheduler.LaunchScheduledTask(task);
+
+                Button delBtn = UiTheme.StyledButton("🗑", "subtle");
+                delBtn.Foreground = UiTheme.Red;
+                delBtn.Click += (_, _) => scheduler.RemoveTask(task);
+
+                actions.Children.Add(runNowBtn);
+                actions.Children.Add(delBtn);
+
+                Grid.SetColumn(enableBox, 0);
+                Grid.SetColumn(infoStack, 1);
+                Grid.SetColumn(actions, 2);
+
+                row.Children.Add(enableBox);
+                row.Children.Add(infoStack);
+                row.Children.Add(actions);
+
+                card.Child = row;
+                return card;
+            })
+        };
+        tasksListPanel.Children.Add(tasksList);
+        mainPanel.Children.Add(UiTheme.Card(tasksListPanel));
+
+        scrollViewer.Content = mainPanel;
+        return scrollViewer;
     }
 }
