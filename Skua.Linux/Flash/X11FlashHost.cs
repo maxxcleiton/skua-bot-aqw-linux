@@ -263,16 +263,17 @@ public class X11FlashHost : NativeControlHost
         }
     }
 
-    protected override void OnPointerEntered(Avalonia.Input.PointerEventArgs e)
+    public void RestoreParentFocus()
     {
-        base.OnPointerEntered(e);
-        FocusFlashWindow();
-    }
-
-    protected override void OnPointerMoved(Avalonia.Input.PointerEventArgs e)
-    {
-        base.OnPointerMoved(e);
-        FocusFlashWindow();
+        if (_display != IntPtr.Zero && _parentXid != IntPtr.Zero)
+        {
+            try
+            {
+                XSetInputFocus(_display, _parentXid, 2 /* RevertToParent */, IntPtr.Zero);
+                XFlush(_display);
+            }
+            catch { }
+        }
     }
 
     protected override void OnPointerPressed(Avalonia.Input.PointerPressedEventArgs e)

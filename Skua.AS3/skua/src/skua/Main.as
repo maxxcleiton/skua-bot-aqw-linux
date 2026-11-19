@@ -10,6 +10,8 @@ import flash.events.Event;
 import flash.events.KeyboardEvent;
 import flash.events.MouseEvent;
 import flash.events.TimerEvent;
+import flash.media.SoundMixer;
+import flash.media.SoundTransform;
 import flash.net.URLLoader;
 import flash.net.URLRequest;
 import flash.system.ApplicationDomain;
@@ -88,6 +90,9 @@ public class Main extends MovieClip {
 
     private function init(e:Event = null):void {
         removeEventListener(Event.ADDED_TO_STAGE, this.init);
+        try {
+            SoundMixer.soundTransform = new SoundTransform(0);
+        } catch (err:Error) {}
         this.external = new Externalizer();
         this.external.init(this);
     }

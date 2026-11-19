@@ -111,7 +111,7 @@ public class LinuxFlashUtil : IFlashUtil
                 psi = new ProcessStartInfo
                 {
                     FileName = ruffleBin,
-                    Arguments = $"--no-gui --tcp-connections allow --socket-allow 127.0.0.1:{port} --base \"file://{_sessionDir}/\" --storage disk --graphics {graphics} --max-render-rate {fps} --power high \"{sessionSwf}\"",
+                    Arguments = $"--no-gui --volume 0 --tcp-connections allow --socket-allow 127.0.0.1:{port} --base \"file://{_sessionDir}/\" --storage disk --graphics {graphics} --max-render-rate {fps} --power high \"{sessionSwf}\"",
                     WorkingDirectory = _sessionDir,
                     UseShellExecute = false
                 };

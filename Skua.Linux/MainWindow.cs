@@ -9,6 +9,7 @@ using Avalonia.Interactivity;
 using Avalonia.Layout;
 using Avalonia.Media;
 using Avalonia.Threading;
+using Avalonia.VisualTree;
 using CommunityToolkit.Mvvm.Messaging;
 using Microsoft.Extensions.DependencyInjection;
 using Skua.Core.Interfaces;
@@ -36,7 +37,7 @@ public class MainWindow : Window
     private readonly TextBlock _playerNameBadge;
     private readonly TabControl _rightTabs;
     private bool _isDocked = true;
-    private bool _fpsBoostEnabled = true;
+    private bool _fpsBoostEnabled = false;
 
     public MainWindow(IServiceProvider services)
     {
@@ -178,11 +179,16 @@ public class MainWindow : Window
             static (win, _) => Dispatcher.UIThread.Post(() => win.SetLoggedPlayerName(string.Empty)));
 
         _bot.Flash.FlashCall += OnFlashCall;
+        AddHandler(InputElement.PointerPressedEvent, OnGlobalPointerPressed, RoutingStrategies.Tunnel);
+        AddHandler(InputElement.GotFocusEvent, OnGlobalGotFocus, RoutingStrategies.Tunnel);
         AddHandler(InputElement.KeyDownEvent, OnGlobalKeyDown, RoutingStrategies.Tunnel);
         AddHandler(InputElement.KeyUpEvent, OnGlobalKeyUp, RoutingStrategies.Tunnel);
-        Activated += (_, _) => _flashHost.FocusFlashWindow();
 
-        Opened += (_, _) => _bot.Flash.InitializeFlash();
+        Opened += (_, _) =>
+        {
+            _bot.Options.LagKiller = false;
+            _bot.Flash.InitializeFlash();
+        };
         Closed += (_, _) =>
         {
             StrongReferenceMessenger.Default.UnregisterAll(this);
@@ -190,10 +196,42 @@ public class MainWindow : Window
         };
     }
 
+    private void OnGlobalGotFocus(object? sender, GotFocusEventArgs e)
+    {
+        if (e.Source is Visual visual && visual != _flashHost)
+        {
+            _flashHost.RestoreParentFocus();
+        }
+    }
+
+    private void OnGlobalPointerPressed(object? sender, PointerPressedEventArgs e)
+    {
+        Visual? source = e.Source as Visual;
+        bool isInsideFlash = false;
+        while (source != null)
+        {
+            if (source == _flashHost)
+            {
+                isInsideFlash = true;
+                break;
+            }
+            source = source.GetVisualParent();
+        }
+
+        if (!isInsideFlash)
+        {
+            _flashHost.RestoreParentFocus();
+        }
+        else
+        {
+            _flashHost.FocusFlashWindow();
+        }
+    }
+
     private void OnGlobalKeyDown(object? sender, KeyEventArgs e)
     {
         var focused = FocusManager?.GetFocusedElement();
-        if (focused is TextBox or AutoCompleteBox)
+        if (focused is not null && focused != _flashHost)
             return;
 
         _flashHost.FocusFlashWindow();
@@ -206,7 +244,7 @@ public class MainWindow : Window
     private void OnGlobalKeyUp(object? sender, KeyEventArgs e)
     {
         var focused = FocusManager?.GetFocusedElement();
-        if (focused is TextBox or AutoCompleteBox)
+        if (focused is not null && focused != _flashHost)
             return;
 
         if (_flashHost.ForwardKey(e.Key, e.KeyModifiers, isPress: false))
@@ -436,7 +474,7 @@ public class MainWindow : Window
             }
         };
 
-        CheckBox fpsBoostChk = new() { Content = "FPS Boost", IsChecked = true, Margin = new Thickness(0, 0, 10, 0) };
+        CheckBox fpsBoostChk = new() { Content = "FPS Boost", IsChecked = false, Margin = new Thickness(0, 0, 10, 0) };
         fpsBoostChk.IsCheckedChanged += (_, _) =>
         {
             bool boost = fpsBoostChk.IsChecked == true;
@@ -469,7 +507,7 @@ public class MainWindow : Window
             });
         };
 
-        CheckBox lagKillerChk = new() { Content = "Lag Killer", Margin = new Thickness(0, 0, 6, 0) };
+        CheckBox lagKillerChk = new() { Content = "Lag Killer", IsChecked = false, Margin = new Thickness(0, 0, 6, 0) };
         lagKillerChk.IsCheckedChanged += (_, _) =>
         {
             bool lk = lagKillerChk.IsChecked == true;
