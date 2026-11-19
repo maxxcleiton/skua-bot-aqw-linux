@@ -101,6 +101,9 @@ public class X11FlashHost : NativeControlHost
     private static extern int XSelectInput(IntPtr display, IntPtr window, long eventMask);
 
     [DllImport("libX11.so.6")]
+    private static extern int XSetInputFocus(IntPtr display, IntPtr window, int revertTo, IntPtr time);
+
+    [DllImport("libX11.so.6")]
     private static extern int XChangeProperty(
         IntPtr display, IntPtr window, IntPtr property, IntPtr type,
         int format, int mode, IntPtr[] data, int nelements);
@@ -165,6 +168,30 @@ public class X11FlashHost : NativeControlHost
 
     private static readonly XErrorHandlerDelegate IgnoreXError = (_, _) => 0;
     private static bool _errorHandlerInstalled;
+
+    public X11FlashHost()
+    {
+        Focusable = true;
+    }
+
+    public void FocusFlashWindow()
+    {
+        if (_display != IntPtr.Zero && _flashTopLevelXid != IntPtr.Zero)
+        {
+            try
+            {
+                XSetInputFocus(_display, _flashTopLevelXid, 2 /* RevertToParent */, IntPtr.Zero);
+                XFlush(_display);
+            }
+            catch { }
+        }
+    }
+
+    protected override void OnPointerPressed(Avalonia.Input.PointerPressedEventArgs e)
+    {
+        base.OnPointerPressed(e);
+        FocusFlashWindow();
+    }
 
     protected override IPlatformHandle CreateNativeControlCore(IPlatformHandle parent)
     {
@@ -382,6 +409,7 @@ public class X11FlashHost : NativeControlHost
         _isEmbedded = true;
         SyncEmbeddedGeometry();
         StartWatchdog();
+        FocusFlashWindow();
     }
 
     private void StartWatchdog()

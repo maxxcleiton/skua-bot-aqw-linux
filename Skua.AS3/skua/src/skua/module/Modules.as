@@ -37,10 +37,14 @@ public class Modules {
     }
 
     public static function handleFrame(e:Event):void {
+        var g:* = Main.instance.getGame();
+        if (g == null || g.ui == null || g.world == null) return;
         for (var name:String in _modules) {
             var module:Module = _modules[name];
-            if (module.enabled) {
-                module.onFrame(Main.instance.getGame());
+            if (module != null && module.enabled) {
+                try {
+                    module.onFrame(g);
+                } catch (err:Error) {}
             }
         }
     }

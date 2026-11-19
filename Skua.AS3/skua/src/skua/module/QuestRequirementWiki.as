@@ -15,6 +15,7 @@ public class QuestRequirementWiki extends Module
 
     override public function onFrame(game:*):void
     {
+        if (game == null || game.ui == null || game.ui.ModalStack == null) return;
         var modalStack:* = game.ui.ModalStack;
         if (!modalStack || modalStack.numChildren == 0) return;
 
