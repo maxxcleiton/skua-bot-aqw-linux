@@ -87,6 +87,20 @@ public class UnifiedSettingsService
                 if (sharedProp?.GetValue(_root.Shared) is object sharedVal)
                     if (typeof(T).IsAssignableFrom(sharedVal.GetType()))
                         return (T)sharedVal;
+
+                if (_root.Client.ExtensionData?.TryGetValue(key, out object? extVal) == true)
+                {
+                    if (extVal is T tVal)
+                        return tVal;
+                    if (extVal is JsonElement je)
+                    {
+                        try
+                        {
+                            return JsonSerializer.Deserialize<T>(je.GetRawText(), GetJsonOptions());
+                        }
+                        catch { }
+                    }
+                }
             }
             catch (Exception)
             {
@@ -109,19 +123,32 @@ public class UnifiedSettingsService
             try
             {
                 PropertyInfo? sharedProp = FindPropertyByJsonName(_root.Shared.GetType(), key);
+                PropertyInfo? clientProp = FindPropertyByJsonName(_root.Client.GetType(), key);
+                PropertyInfo? managerProp = FindPropertyByJsonName(_root.Manager.GetType(), key);
+
                 if (sharedProp != null)
                 {
                     sharedProp.SetValue(_root.Shared, value);
                 }
-                else if (_currentRole == AppRole.Client)
+                else if (clientProp != null && managerProp != null)
                 {
-                    PropertyInfo? clientProp = FindPropertyByJsonName(_root.Client.GetType(), key);
-                    clientProp?.SetValue(_root.Client, value);
+                    if (_currentRole == AppRole.Manager)
+                        managerProp.SetValue(_root.Manager, value);
+                    else
+                        clientProp.SetValue(_root.Client, value);
                 }
-                else if (_currentRole == AppRole.Manager)
+                else if (clientProp != null)
                 {
-                    PropertyInfo? managerProp = FindPropertyByJsonName(_root.Manager.GetType(), key);
-                    managerProp?.SetValue(_root.Manager, value);
+                    clientProp.SetValue(_root.Client, value);
+                }
+                else if (managerProp != null)
+                {
+                    managerProp.SetValue(_root.Manager, value);
+                }
+                else
+                {
+                    _root.Client.ExtensionData ??= new();
+                    _root.Client.ExtensionData[key] = value!;
                 }
 
                 SaveSettings();
@@ -626,7 +653,12 @@ public class UnifiedSettingsService
         foreach (PropertyInfo prop in properties)
         {
             if (prop.GetCustomAttributes(typeof(System.Text.Json.Serialization.JsonPropertyNameAttribute), false)
-                .FirstOrDefault() is System.Text.Json.Serialization.JsonPropertyNameAttribute jsonAttr && jsonAttr.Name == jsonName)
+                .FirstOrDefault() is System.Text.Json.Serialization.JsonPropertyNameAttribute jsonAttr)
+            {
+                if (string.Equals(jsonAttr.Name, jsonName, StringComparison.OrdinalIgnoreCase))
+                    return prop;
+            }
+            if (string.Equals(prop.Name, jsonName, StringComparison.OrdinalIgnoreCase))
                 return prop;
         }
         return null;
