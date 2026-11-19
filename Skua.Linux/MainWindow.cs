@@ -49,6 +49,7 @@ public class MainWindow : Window
         MinHeight = 640;
         WindowStartupLocation = WindowStartupLocation.CenterScreen;
         Background = UiTheme.BgCrust;
+        LoadWindowIcon();
 
         _flashHost = new X11FlashHost
         {
@@ -181,6 +182,32 @@ public class MainWindow : Window
             StrongReferenceMessenger.Default.UnregisterAll(this);
             _flashUtil.Dispose();
         };
+    }
+
+    private void LoadWindowIcon()
+    {
+        try
+        {
+            string[] candidates =
+            {
+                System.IO.Path.Combine(AppContext.BaseDirectory, "Assets", "SkuaIcon.png"),
+                System.IO.Path.Combine(AppContext.BaseDirectory, "SkuaIcon.png"),
+                System.IO.Path.Combine(AppContext.BaseDirectory, "Assets", "SkuaIcon.ico"),
+                System.IO.Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".local", "share", "icons", "skua.png"),
+                System.IO.Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".local", "share", "icons", "hicolor", "256x256", "apps", "skua.png"),
+                "/home/max/coding/Skua-Linux/Assets/SkuaIcon.png"
+            };
+
+            foreach (string path in candidates)
+            {
+                if (System.IO.File.Exists(path))
+                {
+                    Icon = new WindowIcon(path);
+                    break;
+                }
+            }
+        }
+        catch { }
     }
 
     private void SetLoggedPlayerName(string? username)

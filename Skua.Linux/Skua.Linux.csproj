@@ -30,6 +30,15 @@
   </ItemGroup>
 
   <ItemGroup>
+    <None Include="..\Assets\SkuaIcon.png" Link="Assets\SkuaIcon.png">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+    <None Include="..\Assets\SkuaIcon.png" Link="SkuaIcon.png">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+    <None Include="..\Assets\SkuaIcon.ico" Link="Assets\SkuaIcon.ico">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
     <None Include="..\Skua.AS3\skua\bin\skua.swf" Link="skua.swf">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
