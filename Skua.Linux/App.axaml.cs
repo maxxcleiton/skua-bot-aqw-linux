@@ -19,6 +19,7 @@ public partial class App : Application
     public IServiceProvider? Services { get; private set; }
     private IScriptInterface? _bot;
     private SkuaLinuxStartupHandler? _startup;
+    private LeaderButlerSyncv2.LeaderButlerSyncPlugin? _syncPlugin;
 
     public override void Initialize()
     {
@@ -50,6 +51,9 @@ public partial class App : Application
         RoslynLifetimeManager.WarmupRoslyn();
         ManagedWindows.Register(Services);
 
+        _syncPlugin = new LeaderButlerSyncv2.LeaderButlerSyncPlugin();
+        _syncPlugin.Load(Services, null!);
+
         if (ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
         {
             desktop.MainWindow = new MainWindow(Services);
@@ -79,6 +83,7 @@ public partial class App : Application
             Services.GetRequiredService<IFlashUtil>().Dispose();
             Services.GetRequiredService<ICaptureProxy>().Stop();
             Services.GetService<AutoCombatPotionService>()?.Dispose();
+            _syncPlugin?.Dispose();
             await ((IAsyncDisposable)Services.GetRequiredService<IScriptBoost>()).DisposeAsync();
             await ((IAsyncDisposable)Services.GetRequiredService<IScriptBotStats>()).DisposeAsync();
             await ((IAsyncDisposable)Services.GetRequiredService<IScriptDrop>()).DisposeAsync();
