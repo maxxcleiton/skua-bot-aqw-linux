@@ -489,7 +489,7 @@ public class MainWindow : Window
 
         ComboBox qualitySelector = new()
         {
-            ItemsSource = new[] { "Quality: LOW", "Quality: MEDIUM", "Quality: HIGH" },
+            ItemsSource = new[] { "Quality: HIGH", "Quality: MEDIUM", "Quality: LOW" },
             SelectedIndex = 0,
             Width = 132,
             Margin = new Thickness(0, 0, 10, 0)
@@ -827,6 +827,8 @@ public class MainWindow : Window
             Margin = new Thickness(0, 0, 6, 4)
         };
 
+        ListBox scriptsList = new();
+
         Button refreshBtn = UiTheme.StyledButton("Refresh", "subtle");
         refreshBtn.Command = vm.RefreshScriptsCommand;
         Button dlAllBtn = UiTheme.StyledButton("Download All", "subtle");
@@ -865,7 +867,11 @@ public class MainWindow : Window
         vm.PropertyChanged += (_, e) =>
         {
             if (e.PropertyName is nameof(ScriptRepoViewModel.BotScriptQuantity) or nameof(ScriptRepoViewModel.DownloadedQuantity) or nameof(ScriptRepoViewModel.OutdatedQuantity))
-                Dispatcher.UIThread.Post(UpdateCountsText);
+                Dispatcher.UIThread.Post(() =>
+                {
+                    UpdateCountsText();
+                    ApplySearchFilter();
+                });
         };
 
         Grid statusRow = new()
@@ -880,16 +886,35 @@ public class MainWindow : Window
         };
         Grid.SetRow(statusRow, 1);
 
-        ListBox scriptsList = new()
-        {
-            ItemsSource = vm.Scripts,
-            ItemTemplate = new FuncDataTemplate<ScriptInfoViewModel>((script, _) =>
+        scriptsList.ItemsSource = vm.Scripts;
+        scriptsList.ItemTemplate = new FuncDataTemplate<ScriptInfoViewModel>((script, _) =>
             {
                 if (script is null) return new TextBlock();
 
-                Grid row = new() { ColumnDefinitions = new ColumnDefinitions("*,Auto") };
+                Grid row = new() { ColumnDefinitions = new ColumnDefinitions("Auto,*,Auto") };
 
-                StackPanel textCol = new() { Spacing = 1 };
+                Button favBtn = new()
+                {
+                    Content = script.IsFavorite ? "★" : "☆",
+                    Foreground = script.IsFavorite ? UiTheme.Yellow : UiTheme.TextDim,
+                    Background = Brushes.Transparent,
+                    BorderThickness = new Thickness(0),
+                    Padding = new Thickness(2, 2, 4, 2),
+                    FontSize = 14,
+                    VerticalAlignment = VerticalAlignment.Center,
+                    Cursor = new Cursor(StandardCursorType.Hand)
+                };
+                favBtn.Click += (_, e) =>
+                {
+                    e.Handled = true;
+                    script.ToggleFavorite();
+                    favBtn.Content = script.IsFavorite ? "★" : "☆";
+                    favBtn.Foreground = script.IsFavorite ? UiTheme.Yellow : UiTheme.TextDim;
+                    ApplySearchFilter();
+                };
+                Grid.SetColumn(favBtn, 0);
+
+                StackPanel textCol = new() { Spacing = 1, Margin = new Thickness(6, 0, 0, 0) };
                 textCol.Children.Add(new TextBlock
                 {
                     Text = script.FileName,
@@ -905,18 +930,19 @@ public class MainWindow : Window
                     FontSize = 10.5,
                     TextTrimming = TextTrimming.CharacterEllipsis
                 });
-                Grid.SetColumn(textCol, 0);
+                Grid.SetColumn(textCol, 1);
 
                 string badgeLabel = script.Downloaded ? (script.Outdated ? "Update" : "Local") : "Cloud";
                 IBrush badgeColor = script.Downloaded ? (script.Outdated ? UiTheme.Yellow : UiTheme.Green) : UiTheme.TextMuted;
                 Border badge = UiTheme.Badge(badgeLabel, badgeColor);
-                Grid.SetColumn(badge, 1);
+                badge.VerticalAlignment = VerticalAlignment.Center;
+                Grid.SetColumn(badge, 2);
 
+                row.Children.Add(favBtn);
                 row.Children.Add(textCol);
                 row.Children.Add(badge);
                 return row;
-            })
-        };
+            });
         scriptsList.Bind(SelectingItemsControl.SelectedItemProperty, new Binding(nameof(ScriptRepoViewModel.SelectedItem)) { Source = vm, Mode = BindingMode.TwoWay });
 
         TextBlock descTitle = new() { Text = "Select a script to view details", FontWeight = FontWeight.Bold, Foreground = UiTheme.Blue, FontSize = 12 };
@@ -942,21 +968,21 @@ public class MainWindow : Window
         void ApplySearchFilter()
         {
             string q = searchBox.Text?.Trim() ?? string.Empty;
-            if (string.IsNullOrEmpty(q))
+            IEnumerable<ScriptInfoViewModel> source = vm.Scripts;
+            if (!string.IsNullOrEmpty(q))
             {
-                scriptsList.ItemsSource = vm.Scripts;
+                source = source.Where(s => s.FileName.Contains(q, StringComparison.OrdinalIgnoreCase) ||
+                                           s.FilePath.Contains(q, StringComparison.OrdinalIgnoreCase) ||
+                                           s.TagSearchText.Contains(q, StringComparison.OrdinalIgnoreCase) ||
+                                           (s.Info.Description?.Contains(q, StringComparison.OrdinalIgnoreCase) ?? false));
             }
-            else
-            {
-                scriptsList.ItemsSource = vm.Scripts
-                    .Where(s => s.FileName.Contains(q, StringComparison.OrdinalIgnoreCase) ||
-                                s.FilePath.Contains(q, StringComparison.OrdinalIgnoreCase) ||
-                                s.TagSearchText.Contains(q, StringComparison.OrdinalIgnoreCase) ||
-                                (s.Info.Description?.Contains(q, StringComparison.OrdinalIgnoreCase) ?? false))
-                    .ToList();
-            }
+            scriptsList.ItemsSource = source
+                .OrderByDescending(s => s.IsFavorite)
+                .ThenBy(s => s.FileName)
+                .ToList();
         }
         searchBox.TextChanged += (_, _) => ApplySearchFilter();
+        ApplySearchFilter();
 
         Grid.SetRow(scriptsList, 2);
 

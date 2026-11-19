@@ -4,6 +4,7 @@ using CommunityToolkit.Mvvm.Messaging;
 using Skua.Core.Messaging;
 using Skua.Core.Models;
 using Skua.Core.Models.GitHub;
+using Skua.Core.Services;
 using System.Collections.ObjectModel;
 
 namespace Skua.Core.ViewModels;
@@ -14,6 +15,7 @@ public partial class ScriptInfoViewModel : ObservableObject
     {
         Info = info;
         _downloaded = Info.Downloaded;
+        _isFavorite = ScriptFavoritesManager.IsFavorite(Info.FilePath);
     }
 
     public ScriptInfo Info { get; }
@@ -52,6 +54,14 @@ public partial class ScriptInfoViewModel : ObservableObject
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(Outdated))]
     private bool _downloaded;
+
+    [ObservableProperty]
+    private bool _isFavorite;
+
+    public void ToggleFavorite()
+    {
+        IsFavorite = ScriptFavoritesManager.ToggleFavorite(Info.FilePath);
+    }
 
     public bool Outdated => Downloaded && Info.LocalSize != Info.Size;
 

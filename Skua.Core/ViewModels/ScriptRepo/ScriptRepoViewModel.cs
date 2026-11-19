@@ -5,6 +5,7 @@ using Skua.Core.Interfaces;
 using Skua.Core.Messaging;
 using Skua.Core.Models;
 using Skua.Core.Models.GitHub;
+using Skua.Core.Services;
 using Skua.Core.Utils;
 
 namespace Skua.Core.ViewModels;
@@ -82,7 +83,7 @@ public partial class ScriptRepoViewModel : BotControlViewModelBase
     private string _filterBy = "All";
 
     public List<string> SortOptions { get; } = new() { "Name", "Date Created" };
-    public List<string> FilterOptions { get; } = new() { "All", "Army", "Classes", "Dailies", "Evil", "Farm", "Good", "Legion", "Local", "Nation", "Other", "Rep", "Seasonal", "Story", "Ultras" };
+    public List<string> FilterOptions { get; } = new() { "All", "Favorites", "Army", "Classes", "Dailies", "Evil", "Farm", "Good", "Legion", "Local", "Nation", "Other", "Rep", "Seasonal", "Story", "Ultras" };
 
     public int ScriptQuantity => _getScriptsService.Total;
     public int BotScriptQuantity => _scripts.Count;
@@ -395,6 +396,9 @@ public partial class ScriptRepoViewModel : BotControlViewModelBase
         if (FilterBy == "All")
             return true;
 
+        if (FilterBy == "Favorites")
+            return ScriptFavoritesManager.IsFavorite(script.FilePath);
+
         if (FilterBy == "Local")
             return script.Tags?.Contains("Local") == true || script.FilePath.Contains("UserCustom", StringComparison.OrdinalIgnoreCase);
 
@@ -407,13 +411,13 @@ public partial class ScriptRepoViewModel : BotControlViewModelBase
         if (SortBy == "Date Created")
         {
             return SortDescending
-                ? viewModels.OrderByDescending(x => x.Info.CreationDate ?? DateTime.MinValue).ToList()
-                : viewModels.OrderBy(x => x.Info.CreationDate ?? DateTime.MinValue).ToList();
+                ? viewModels.OrderByDescending(x => x.IsFavorite).ThenByDescending(x => x.Info.CreationDate ?? DateTime.MinValue).ToList()
+                : viewModels.OrderByDescending(x => x.IsFavorite).ThenBy(x => x.Info.CreationDate ?? DateTime.MinValue).ToList();
         }
 
         return SortDescending
-            ? viewModels.OrderByDescending(x => x.FileName).ToList()
-            : viewModels.OrderBy(x => x.FileName).ToList();
+            ? viewModels.OrderByDescending(x => x.IsFavorite).ThenByDescending(x => x.FileName).ToList()
+            : viewModels.OrderByDescending(x => x.IsFavorite).ThenBy(x => x.FileName).ToList();
     }
 
     public void ProgressHandler(string message)

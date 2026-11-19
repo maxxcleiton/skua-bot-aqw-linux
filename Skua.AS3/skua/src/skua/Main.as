@@ -53,7 +53,7 @@ public class Main extends MovieClip {
     private var packetClient:*;
     private var packetDebug:Boolean;
     private static var _targetFPS:int = 60;
-    private static var _targetQuality:String = "low";
+    private static var _targetQuality:String = "high";
     private var _frameCounter:int = 0;
 
     public function Main() {
@@ -218,9 +218,6 @@ public class Main extends MovieClip {
         if (this.stg) {
             if (this.stg.frameRate != _targetFPS) {
                 this.stg.frameRate = _targetFPS;
-            }
-            if (this.stg.quality.toLowerCase() != _targetQuality) {
-                this.stg.quality = _targetQuality;
             }
         }
         if (!this.customBGReady || !this.game || !this.game.mcLogin) return;
