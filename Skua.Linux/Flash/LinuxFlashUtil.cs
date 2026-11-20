@@ -106,7 +106,11 @@ public class LinuxFlashUtil : IFlashUtil
                 Trace.WriteLine($"[LinuxFlashUtil] Launching BattleOn Engine (Ruffle): {ruffleBin}");
 
                 string graphics = _settingsService?.Get<string>("LinuxRuffleGraphics", "vulkan") ?? "vulkan";
-                string fps = _settingsService?.Get<string>("LinuxRuffleFps", "24") ?? "24";
+                string fps = _settingsService?.Get<string>("LinuxRuffleFps", "60") ?? "60";
+                if (fps is not "display" and not "60" and not "120" and not "144" and not "240")
+                {
+                    fps = "60";
+                }
 
                 psi = new ProcessStartInfo
                 {
