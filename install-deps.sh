@@ -51,7 +51,7 @@ else
 fi
 
 # 4. Ajustar permissões
-echo "[4/4] Ajustando permissões de execução..."
+echo "[4/5] Ajustando permissões de execução..."
 chmod +x "$DIR/run-linux.sh" 2>/dev/null || true
 chmod +x "$DIR/build-linux.sh" 2>/dev/null || true
 
@@ -66,9 +66,68 @@ if [ -f "$DIR/.tools/ruffle/ruffle_desktop" ]; then
     chmod +x "$DIR/.tools/ruffle/ruffle_desktop"
 fi
 
+# 5. Criar atalhos (.desktop) no Menu e na Área de Trabalho
+echo "[5/5] Configurando atalhos na Área de Trabalho e Menu de Aplicativos..."
+ICON_DIR="$HOME/.local/share/icons/hicolor/256x256/apps"
+APP_DIR="$HOME/.local/share/applications"
+mkdir -p "$ICON_DIR" "$APP_DIR" "$HOME/.local/share/icons"
+
+if [ -f "$DIR/Assets/SkuaIcon.png" ]; then
+    cp -f "$DIR/Assets/SkuaIcon.png" "$HOME/.local/share/icons/skua.png"
+    cp -f "$DIR/Assets/SkuaIcon.png" "$ICON_DIR/skua.png"
+fi
+
+cat << EOF > "$APP_DIR/skua.desktop"
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=Skua Linux
+GenericName=AQW Bot & Client
+Comment=AdventureQuest Worlds Bot & Client for Linux (Native .NET 10)
+Exec=$DIR/run-linux.sh %u
+Path=$DIR
+Icon=skua
+Terminal=false
+Categories=Game;Utility;
+Keywords=aqw;skua;bot;adventurequest;
+StartupWMClass=Skua
+StartupNotify=true
+EOF
+chmod +x "$APP_DIR/skua.desktop"
+
+# Detectar todas as possíveis pastas de Área de Trabalho
+DESKTOP_DIRS=()
+if command -v xdg-user-dir >/dev/null 2>&1; then
+    XDG_DESK="$(xdg-user-dir DESKTOP 2>/dev/null || true)"
+    if [ -n "$XDG_DESK" ] && [ -d "$XDG_DESK" ]; then
+        DESKTOP_DIRS+=("$XDG_DESK")
+    fi
+fi
+for fallback in "$HOME/Desktop" "$HOME/Área de trabalho"; do
+    if [ -d "$fallback" ]; then
+        DESKTOP_DIRS+=("$fallback")
+    fi
+done
+
+# Copiar atalho e marcar como confiável/executável
+declare -A SEEN_DESK=()
+for desk in "${DESKTOP_DIRS[@]}"; do
+    if [ -z "${SEEN_DESK["$desk"]:-}" ]; then
+        SEEN_DESK["$desk"]=1
+        cp -f "$APP_DIR/skua.desktop" "$desk/skua.desktop"
+        chmod +x "$desk/skua.desktop"
+        gio set "$desk/skua.desktop" metadata::trusted true 2>/dev/null || true
+        echo "Atalho criado com sucesso em: $desk/skua.desktop"
+    fi
+done
+
+update-desktop-database "$APP_DIR" 2>/dev/null || true
+gtk-update-icon-cache -f "$HOME/.local/share/icons/hicolor" 2>/dev/null || true
+
 echo ""
 echo "=================================================="
 echo "  Instalação concluída com sucesso!               "
-echo "  Para iniciar o bot, execute:                    "
+echo "  Atalho criado na sua Área de Trabalho!          "
+echo "  Para iniciar pelo terminal, execute:            "
 echo "    cd \"$DIR\" && ./run-linux.sh                 "
 echo "=================================================="

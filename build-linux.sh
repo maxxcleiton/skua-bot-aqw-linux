@@ -39,22 +39,38 @@ Version=1.0
 Type=Application
 Name=Skua Linux
 GenericName=AQW Bot & Client
-Comment=AdventureQuest Worlds Bot & Client for Linux
-Exec=$OUT_DIR/Skua %u
+Comment=AdventureQuest Worlds Bot & Client for Linux (Native .NET 10)
+Exec=$DIR/run-linux.sh %u
+Path=$DIR
 Icon=skua
 Terminal=false
-Categories=Game;
+Categories=Game;Utility;
 Keywords=aqw;skua;bot;adventurequest;
 StartupWMClass=Skua
 StartupNotify=true
 EOF
 chmod +x "$APP_DIR/skua.desktop"
 
-for desktop_dir in "$HOME/Desktop" "$HOME/Área de trabalho"; do
-    if [ -d "$desktop_dir" ]; then
-        cp -f "$APP_DIR/skua.desktop" "$desktop_dir/skua.desktop"
-        chmod +x "$desktop_dir/skua.desktop"
-        gio set "$desktop_dir/skua.desktop" metadata::trusted true 2>/dev/null || true
+DESKTOP_DIRS=()
+if command -v xdg-user-dir >/dev/null 2>&1; then
+    XDG_DESK="$(xdg-user-dir DESKTOP 2>/dev/null || true)"
+    if [ -n "$XDG_DESK" ] && [ -d "$XDG_DESK" ]; then
+        DESKTOP_DIRS+=("$XDG_DESK")
+    fi
+fi
+for fallback in "$HOME/Desktop" "$HOME/Área de trabalho"; do
+    if [ -d "$fallback" ]; then
+        DESKTOP_DIRS+=("$fallback")
+    fi
+done
+
+declare -A SEEN_DESK=()
+for desk in "${DESKTOP_DIRS[@]}"; do
+    if [ -z "${SEEN_DESK["$desk"]:-}" ]; then
+        SEEN_DESK["$desk"]=1
+        cp -f "$APP_DIR/skua.desktop" "$desk/skua.desktop"
+        chmod +x "$desk/skua.desktop"
+        gio set "$desk/skua.desktop" metadata::trusted true 2>/dev/null || true
     fi
 done
 

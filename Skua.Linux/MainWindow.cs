@@ -14,6 +14,7 @@ using CommunityToolkit.Mvvm.Messaging;
 using Microsoft.Extensions.DependencyInjection;
 using Skua.Core.Interfaces;
 using Skua.Core.Messaging;
+using Skua.Core.Models;
 using Skua.Core.Models.Items;
 using Skua.Core.Models.Monsters;
 using Skua.Core.Models.Quests;
@@ -46,7 +47,7 @@ public class MainWindow : Window
         _bot = services.GetRequiredService<IScriptInterface>();
         _flashUtil = (LinuxFlashUtil)services.GetRequiredService<IFlashUtil>();
 
-        Title = "Skua Linux — Native .NET 10";
+        Title = AppVersion.FullTitle;
         Width = 1480;
         Height = 840;
         MinWidth = 1080;
@@ -314,13 +315,13 @@ public class MainWindow : Window
         {
             _playerNameBadge.Text = username;
             _playerNamePill.IsVisible = true;
-            Title = $"Skua Linux — {username}";
+            Title = $"Skua Linux v{AppVersion.Version} — {username}";
         }
         else
         {
             _playerNameBadge.Text = string.Empty;
             _playerNamePill.IsVisible = false;
-            Title = "Skua Linux — Native .NET 10";
+            Title = AppVersion.FullTitle;
         }
     }
 
@@ -387,7 +388,8 @@ public class MainWindow : Window
                     Foreground = UiTheme.Blue,
                     VerticalAlignment = VerticalAlignment.Center
                 },
-                UiTheme.Badge("LINUX", UiTheme.Mauve, UiTheme.BgSurface)
+                UiTheme.Badge("LINUX", UiTheme.Mauve, UiTheme.BgSurface),
+                UiTheme.Badge(AppVersion.DisplayVersion, UiTheme.Teal, UiTheme.BgSurface)
             }
         };
 
