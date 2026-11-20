@@ -9,7 +9,7 @@ export JAVA_HOME="$DIR/.tools/jdk-17.0.21+9-jre"
 echo "[1/2] Compiling Skua.AS3 (skua.swf)..."
 cd "$DIR/Skua.AS3"
 mkdir -p skua/bin
-mxmlc -source-path "skua/src" -default-size 958 550 -default-frame-rate 60 -output "skua/bin/skua.swf" "skua/src/skua/Main.as" -target-player 28.0 -optimize
+mxmlc -source-path "skua/src" -default-size 958 550 -default-frame-rate 24 -output "skua/bin/skua.swf" "skua/src/skua/Main.as" -target-player 28.0 -optimize
 
 echo "[2/2] Building Skua.Linux (.NET 10)..."
 cd "$DIR"

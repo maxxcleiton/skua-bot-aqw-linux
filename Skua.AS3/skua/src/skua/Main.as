@@ -26,7 +26,7 @@ import skua.module.ModalMC;
 import skua.module.Modules;
 import skua.util.SFSEvent;
 
-[SWF(frameRate="60", backgroundColor="#000000", width="958", height="550")]
+[SWF(frameRate="24", backgroundColor="#000000", width="958", height="550")]
 public class Main extends MovieClip {
     public static var instance:Main;
     private static var _gameClass:Class;
@@ -52,7 +52,7 @@ public class Main extends MovieClip {
     private var customBackgroundURL:String;
     private var packetClient:*;
     private var packetDebug:Boolean;
-    private static var _targetFPS:int = 60;
+    private static var _targetFPS:int = 24;
     private static var _targetQuality:String = "high";
     private var _frameCounter:int = 0;
 

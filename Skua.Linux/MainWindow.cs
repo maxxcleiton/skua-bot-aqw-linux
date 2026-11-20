@@ -46,6 +46,7 @@ public class MainWindow : Window
         _services = services;
         _bot = services.GetRequiredService<IScriptInterface>();
         _flashUtil = (LinuxFlashUtil)services.GetRequiredService<IFlashUtil>();
+        _bot.Options.SetFPS = 24;
 
         Title = AppVersion.FullTitle;
         Width = 1480;
@@ -342,7 +343,12 @@ public class MainWindow : Window
                 if (loaded)
                 {
                     bool boost = _fpsBoostEnabled;
-                    Task.Run(() => _bot.Flash.Call(boost ? "modEnable" : "modDisable", "FpsBoost"));
+                    Task.Run(() =>
+                    {
+                        _bot.Flash.Call(boost ? "modEnable" : "modDisable", "FpsBoost");
+                        _bot.Options.SetFPS = 24;
+                        _bot.Flash.Call("setFrameRate", 24);
+                    });
                 }
             });
         }
@@ -472,7 +478,7 @@ public class MainWindow : Window
 
         ComboBox fpsSelector = new()
         {
-            ItemsSource = new[] { "60 FPS", "120 FPS", "240 FPS", "30 FPS" },
+            ItemsSource = new[] { "24 FPS", "30 FPS", "60 FPS", "120 FPS" },
             SelectedIndex = 0,
             Width = 92,
             Margin = new Thickness(0, 0, 6, 0)
@@ -1507,11 +1513,11 @@ public class MainWindow : Window
         ISettingsService settingsSvc = _services.GetRequiredService<ISettingsService>();
         string currentEngine = settingsSvc.Get<string>("LinuxFlashEngine", "Ruffle") ?? "Ruffle";
         string currentGfx = settingsSvc.Get<string>("LinuxRuffleGraphics", "vulkan") ?? "vulkan";
-        string currentFps = settingsSvc.Get<string>("LinuxRuffleFps", "60") ?? "60";
+        string currentFps = settingsSvc.Get<string>("LinuxRuffleFps", "24") ?? "24";
 
         ComboBox engineCombo = new()
         {
-            ItemsSource = new string[] { "The BattleOn Engine (Ruffle Vulkan - 60 FPS)", "Adobe Flash Player (Legado)" },
+            ItemsSource = new string[] { "The BattleOn Engine (Ruffle Vulkan - Recomendado)", "Adobe Flash Player (Legado)" },
             SelectedIndex = currentEngine.Equals("AdobeFlash", StringComparison.OrdinalIgnoreCase) ? 1 : 0,
             Width = 340
         };
@@ -1545,24 +1551,26 @@ public class MainWindow : Window
 
         ComboBox fpsCombo = new()
         {
-            ItemsSource = new string[] { "60 FPS (Padrão)", "120 FPS", "144 FPS", "Taxa do Monitor (Display Refresh)" },
+            ItemsSource = new string[] { "24 FPS (Econômico / Padrão)", "30 FPS", "60 FPS", "120 FPS", "Taxa do Monitor (Display Refresh)" },
             SelectedIndex = currentFps switch
             {
-                "120" => 1,
-                "144" => 2,
-                "display" => 3,
+                "30" => 1,
+                "60" => 2,
+                "120" => 3,
+                "display" => 4,
                 _ => 0
             },
-            Width = 240
+            Width = 260
         };
         fpsCombo.SelectionChanged += (_, _) =>
         {
             string chosen = fpsCombo.SelectedIndex switch
             {
-                1 => "120",
-                2 => "144",
-                3 => "display",
-                _ => "60"
+                1 => "30",
+                2 => "60",
+                3 => "120",
+                4 => "display",
+                _ => "24"
             };
             settingsSvc.Set("LinuxRuffleFps", chosen);
         };
