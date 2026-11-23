@@ -65,6 +65,7 @@ public class LogService : ObservableRecipient, ILogService, IDisposable
     {
         if (message is null)
             return;
+        Console.WriteLine($"[Script] {message}");
         lock (_scriptLock)
         {
             if (_scriptLogs.Count >= MaxLogEntries)

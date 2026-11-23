@@ -496,19 +496,24 @@ public class ScriptInterface : IScriptInterface, IScriptInterfaceManager, IDispo
 
                             case "sellItem":
                                 Stats.GetSpace();
-                                Messenger.Send<ItemSoldMessage, int>(new(
-                                    Convert.ToInt32(data.CharItemID),
-                                    Convert.ToInt32(data.iQty),
-                                    Convert.ToInt32(data.iQtyNow),
-                                    Convert.ToInt32(data.intAmount),
-                                    Convert.ToInt32(data.bCoins) == 1),
-                                    (int)MessageChannels.GameEvents);
+                                {
+                                    var soldMessage = new ItemSoldMessage(
+                                        Convert.ToInt32(data.CharItemID),
+                                        Convert.ToInt32(data.iQty),
+                                        Convert.ToInt32(data.iQtyNow),
+                                        Convert.ToInt32(data.intAmount),
+                                        Convert.ToInt32(data.bCoins) == 1);
+                                    Messenger.Send<ItemSoldMessage, int>(soldMessage, (int)MessageChannels.GameEvents);
+                                    Messenger.Send<ItemSoldMessage>(soldMessage);
+                                }
                                 break;
 
                             case "buyItem":
                                 if (data.bitSuccess == 1)
                                 {
-                                    Messenger.Send<ItemBoughtMessage, int>(new(Convert.ToInt32(data.CharItemID)), (int)MessageChannels.GameEvents);
+                                    var boughtMessage = new ItemBoughtMessage(Convert.ToInt32(data.CharItemID));
+                                    Messenger.Send<ItemBoughtMessage, int>(boughtMessage, (int)MessageChannels.GameEvents);
+                                    Messenger.Send<ItemBoughtMessage>(boughtMessage);
                                     Stats.GetSpace();
                                 }
                                 break;
@@ -573,6 +578,7 @@ public class ScriptInterface : IScriptInterface, IScriptInterfaceManager, IDispo
                             case "loadBank":
                                 Stats.GetSpace();
                                 Messenger.Send<BankLoadedMessage, int>((int)MessageChannels.GameEvents);
+                                Messenger.Send<BankLoadedMessage>();
                                 break;
 
                             case "loadShop":
