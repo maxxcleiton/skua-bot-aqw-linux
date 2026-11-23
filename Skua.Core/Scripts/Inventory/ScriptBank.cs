@@ -28,7 +28,9 @@ public partial class ScriptBank : IScriptBank
         _lazyManager = manager;
         _lazyPlayer = player;
 
+        StrongReferenceMessenger.Default.Register<ScriptBank, BankLoadedMessage, int>(this, (int)MessageChannels.GameEvents, (r, m) => r.Loaded = true);
         StrongReferenceMessenger.Default.Register<ScriptBank, BankLoadedMessage>(this, (r, m) => r.Loaded = true);
+        StrongReferenceMessenger.Default.Register<ScriptBank, LogoutMessage, int>(this, (int)MessageChannels.GameEvents, (r, m) => r.Loaded = false);
         StrongReferenceMessenger.Default.Register<ScriptBank, LogoutMessage>(this, (r, m) => r.Loaded = false);
     }
 
@@ -50,7 +52,12 @@ public partial class ScriptBank : IScriptBank
     private IScriptManager Manager => _lazyManager.Value;
     private IScriptPlayer Player => _lazyPlayer.Value;
 
-    public bool Loaded { get; set; } = false;
+    private bool _loaded = false;
+    public bool Loaded
+    {
+        get => _loaded || (Flash.IsWorldLoaded && (Flash.GetGameObject<bool>("world.bankinfo.isLoaded") || Flash.GetGameObject<int>("world.bankinfo.items.length") > 0));
+        set => _loaded = value;
+    }
 
     [ObjectBinding("world.bankinfo.items", Default = "new()")]
     private List<InventoryItem> _items = new();
@@ -70,7 +77,7 @@ public partial class ScriptBank : IScriptBank
 
     public void Load(bool waitForLoad = true)
     {
-        if (Flash.GetGameObject("ui.mcPopup.currentLabel") == "Bank")
+        if (Loaded)
             return;
         Send.Packet($"%xt%zm%loadBank%{Map.RoomID}%All%");
         if (waitForLoad)

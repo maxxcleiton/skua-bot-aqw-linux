@@ -24,7 +24,7 @@ public interface ICheckInventory<T> : IItemContainer<T> where T : ItemBase
     /// <returns><see langword="true"/> if the player has the specified item stack.</returns>
     bool Contains(string name, int quantity = 1)
     {
-        return quantity == 0 || Items.Contains(i => i.Name == name && (i.Quantity >= quantity || i.Category == ItemCategory.Class));
+        return quantity == 0 || Items.Contains(i => i != null && string.Equals(i.Name, name, StringComparison.OrdinalIgnoreCase) && (i.Quantity >= quantity || i.Category == ItemCategory.Class));
     }
 
     /// <summary>
@@ -35,7 +35,7 @@ public interface ICheckInventory<T> : IItemContainer<T> where T : ItemBase
     /// <returns><see langword="true"/> if the player has the specified item stack.</returns>
     bool Contains(int id, int quantity = 1)
     {
-        return quantity == 0 || Items.Contains(i => i.ID == id && (i.Quantity >= quantity || i.Category == ItemCategory.Class));
+        return quantity == 0 || Items.Contains(i => i != null && i.ID == id && (i.Quantity >= quantity || i.Category == ItemCategory.Class));
     }
 
     /// <summary>
@@ -119,7 +119,7 @@ public interface ICheckInventory<T> : IItemContainer<T> where T : ItemBase
     /// <returns>The <see cref="T"/> with the specified <paramref name="name"/> or <see langword="null"/> if it doesn't exist.</returns>
     T? GetItem(string name)
     {
-        return Items?.Find(x => x.Name == name);
+        return Items?.Find(x => x != null && string.Equals(x.Name, name, StringComparison.OrdinalIgnoreCase));
     }
 
     /// <summary>
@@ -129,7 +129,7 @@ public interface ICheckInventory<T> : IItemContainer<T> where T : ItemBase
     /// <returns>The <see cref="T"/> with the specified <paramref name="id"/> or <see langword="null"/> if it doesn't exist.</returns>
     T? GetItem(int id)
     {
-        return Items?.Find(x => x.ID == id);
+        return Items?.Find(x => x != null && x.ID == id);
     }
 
     /// <summary>

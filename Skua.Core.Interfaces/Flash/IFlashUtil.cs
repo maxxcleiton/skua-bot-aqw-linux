@@ -1,5 +1,6 @@
 ﻿using Newtonsoft.Json;
 using System.Xml.Linq;
+using Skua.Core.Models.Converters;
 
 namespace Skua.Core.Interfaces;
 
@@ -98,6 +99,11 @@ public interface IFlashUtil : IDisposable
         return Call("getGameObject", path);
     }
 
+    private static readonly JsonSerializerSettings _defaultFlashJsonSettings = new()
+    {
+        Converters = { new IntConverter() }
+    };
+
     /// <summary>
     /// Gets an actionscript object at the given location and deserializes it as JSON to the given type.
     /// </summary>
@@ -109,7 +115,9 @@ public interface IFlashUtil : IDisposable
     {
         try
         {
-            return JsonConvert.DeserializeObject<T>(GetGameObject(path)!) ?? def;
+            string? json = GetGameObject(path);
+            if (string.IsNullOrEmpty(json)) return def;
+            return JsonConvert.DeserializeObject<T>(json, _defaultFlashJsonSettings) ?? def;
         }
         catch
         {
@@ -138,7 +146,9 @@ public interface IFlashUtil : IDisposable
     {
         try
         {
-            return JsonConvert.DeserializeObject<T>(GetGameObjectStatic(path)!);
+            string? json = GetGameObjectStatic(path);
+            if (string.IsNullOrEmpty(json)) return def;
+            return JsonConvert.DeserializeObject<T>(json, _defaultFlashJsonSettings) ?? def;
         }
         catch
         {
