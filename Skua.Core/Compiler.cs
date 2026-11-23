@@ -367,6 +367,7 @@ public class Compiler : CSharpScriptExecution
 
         try
         {
+            FileStream? crossProcessLock = null;
             if (OperatingSystem.IsWindows())
             {
                 try
@@ -382,6 +383,25 @@ public class Compiler : CSharpScriptExecution
                 {
                     compilationMutex?.Dispose();
                     compilationMutex = null;
+                }
+            }
+            else
+            {
+                string lockDir = Path.Combine(Path.GetTempPath(), "skua_locks");
+                try { Directory.CreateDirectory(lockDir); } catch { }
+                string lockPath = Path.Combine(lockDir, $"{safeKey}.lock");
+                DateTime startLock = DateTime.UtcNow;
+                while (DateTime.UtcNow - startLock < TimeSpan.FromMinutes(2))
+                {
+                    try
+                    {
+                        crossProcessLock = new FileStream(lockPath, FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None);
+                        break;
+                    }
+                    catch (IOException)
+                    {
+                        Thread.Sleep(50);
+                    }
                 }
             }
 
@@ -447,6 +467,7 @@ public class Compiler : CSharpScriptExecution
                 {
                     try { compilationMutex?.ReleaseMutex(); } catch { }
                 }
+                crossProcessLock?.Dispose();
             }
         }
         finally
@@ -474,35 +495,46 @@ public class Compiler : CSharpScriptExecution
         if (SaveGeneratedCode)
             GeneratedClassCode = tree.ToString();
 
-        using FileStream codeStream = new(outputPath, FileMode.Create, FileAccess.Write);
-        EmitResult? compilationResult = null;
-        if (CompileWithDebug)
+        string tempPath = outputPath + $".tmp.{Environment.ProcessId}_{Guid.NewGuid():N}";
+        try
         {
-            const DebugInformationFormat debugOptions = DebugInformationFormat.Embedded;
-            compilationResult = compilation.Emit(codeStream, options: new EmitOptions(debugInformationFormat: debugOptions));
-        }
-        else
-        {
-            compilationResult = compilation.Emit(codeStream);
-        }
-
-        if (!compilationResult.Success)
-        {
-            StringBuilder sb = new();
-            foreach (Diagnostic diag in
-                compilationResult.Diagnostics
-                    .Where(diagnostic => diagnostic.IsWarningAsError || diagnostic.Severity == DiagnosticSeverity.Error))
+            using (FileStream codeStream = new(tempPath, FileMode.Create, FileAccess.Write))
             {
-                sb.AppendLine(diag.ToString());
+                EmitResult? compilationResult = null;
+                if (CompileWithDebug)
+                {
+                    const DebugInformationFormat debugOptions = DebugInformationFormat.Embedded;
+                    compilationResult = compilation.Emit(codeStream, options: new EmitOptions(debugInformationFormat: debugOptions));
+                }
+                else
+                {
+                    compilationResult = compilation.Emit(codeStream);
+                }
+
+                if (!compilationResult.Success)
+                {
+                    StringBuilder sb = new();
+                    foreach (Diagnostic diag in
+                        compilationResult.Diagnostics
+                            .Where(diagnostic => diagnostic.IsWarningAsError || diagnostic.Severity == DiagnosticSeverity.Error))
+                    {
+                        sb.AppendLine(diag.ToString());
+                    }
+
+                    ErrorType = ExecutionErrorTypes.Compilation;
+                    ErrorMessage = sb.ToString();
+                    SetErrors(new ApplicationException(ErrorMessage));
+                    return false;
+                }
             }
 
-            ErrorType = ExecutionErrorTypes.Compilation;
-            ErrorMessage = sb.ToString();
-            SetErrors(new ApplicationException(ErrorMessage));
-            return false;
+            File.Move(tempPath, outputPath, true);
+            return true;
         }
-
-        return true;
+        finally
+        {
+            try { if (File.Exists(tempPath)) File.Delete(tempPath); } catch { }
+        }
     }
 
     private static void TryRunCleanup()
