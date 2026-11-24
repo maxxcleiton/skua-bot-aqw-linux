@@ -39,6 +39,7 @@ public class MainWindow : Window
     private readonly TabControl _rightTabs;
     private bool _isDocked = true;
     private bool _fpsBoostEnabled = false;
+    private int _targetFps = 15;
     private bool _isFlashFocused = false;
 
     public MainWindow(IServiceProvider services)
@@ -342,11 +343,12 @@ public class MainWindow : Window
                 if (loaded)
                 {
                     bool boost = _fpsBoostEnabled;
+                    int fps = _targetFps;
                     Task.Run(() =>
                     {
                         _bot.Flash.Call(boost ? "modEnable" : "modDisable", "FpsBoost");
-                        _bot.Options.SetFPS = 24;
-                        _bot.Flash.Call("setFrameRate", 24);
+                        _bot.Options.SetFPS = fps;
+                        _bot.Flash.Call("setFrameRate", fps);
                     });
                 }
             });
@@ -477,7 +479,7 @@ public class MainWindow : Window
 
         ComboBox fpsSelector = new()
         {
-            ItemsSource = new[] { "24 FPS", "30 FPS", "60 FPS", "120 FPS" },
+            ItemsSource = new[] { "15 FPS", "24 FPS", "30 FPS", "60 FPS", "120 FPS" },
             SelectedIndex = 0,
             Width = 92,
             Margin = new Thickness(0, 0, 6, 0)
@@ -486,6 +488,7 @@ public class MainWindow : Window
         {
             if (fpsSelector.SelectedItem is string s && int.TryParse(s.Split(' ')[0], out int fps))
             {
+                _targetFps = fps;
                 Task.Run(() =>
                 {
                     _bot.Options.SetFPS = fps;
