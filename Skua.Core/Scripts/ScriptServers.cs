@@ -266,6 +266,14 @@ public partial class ScriptServers : ObservableRecipient, IScriptServers
         if (candidates.Count == 0)
             return null;
 
+        if (!Options.AutoReloginAny)
+        {
+            string target = !string.IsNullOrWhiteSpace(preferredName) ? preferredName : (!string.IsNullOrWhiteSpace(Options.ReloginServer) ? Options.ReloginServer : "Twilly");
+            Server? pinned = FindByName(candidates, target, true) ?? FindByName(candidates, target, false) ?? FindByName(candidates, "Twilly", true);
+            if (pinned is not null)
+                return pinned;
+        }
+
         HashSet<string> triedServers = attemptedServers ?? new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
         Server? selectedServer = FindByName(candidates, preferredName, true, triedServers);
@@ -495,7 +503,7 @@ public partial class ScriptServers : ObservableRecipient, IScriptServers
     {
         int tries = 0;
         HashSet<string> attemptedServers = new(StringComparer.OrdinalIgnoreCase);
-        string? preferredServerName = server.Name;
+        string? preferredServerName = server.Name ?? Options.ReloginServer ?? "Twilly";
         try
         {
             while (!token.IsCancellationRequested && !Manager.ShouldExit && !Player.Playing && tries < Options.ReloginTries)
@@ -527,7 +535,8 @@ public partial class ScriptServers : ObservableRecipient, IScriptServers
                 if (!await WaitForServerListReady(token))
                 {
                     ReloginLog($"Attempt {tries}/{Options.ReloginTries}: server list screen not ready.");
-                    preferredServerName = null;
+                    if (Options.AutoReloginAny)
+                        preferredServerName = null;
                     if (tries < Options.ReloginTries)
                         await WaitReloginDelay(token);
                     continue;
@@ -557,7 +566,8 @@ public partial class ScriptServers : ObservableRecipient, IScriptServers
                 }
 
                 ReloginLog($"Attempt {tries}/{Options.ReloginTries} failed on {targetServer.Name}.");
-                preferredServerName = null;
+                if (Options.AutoReloginAny)
+                    preferredServerName = null;
 
                 if (tries < Options.ReloginTries)
                     await WaitReloginDelay(token);
