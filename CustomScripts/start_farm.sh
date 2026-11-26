@@ -1,0 +1,116 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+export DISPLAY="${DISPLAY:-:0.0}"
+export XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/run/user/1000}"
+export DOTNET_ROOT="${DOTNET_ROOT:-/home/max/.dotnet}"
+export DOTNET_ROOT_X64="${DOTNET_ROOT_X64:-/home/max/.dotnet}"
+export PATH="/home/max/.dotnet:/home/max/.local/bin:$PATH"
+
+SKUA_BIN="/home/max/Skua-Linux/Skua.Linux/bin/Debug/net10.0/Skua"
+HDBON_SCRIPT="/home/max/Skua-Linux/CustomScripts/HDBoN/HollowbornDragonBladeOfNulgath.cs"
+BUTLER_SCRIPT="/home/max/Skua-Linux/CustomScripts/ButlerV4/Butlerv4.cs"
+LOG_DIR="/home/max/.config/Skua/logs"
+SYNC_FILE="/home/max/.config/Skua/leader_sync_ports.json"
+mkdir -p "$LOG_DIR"
+
+for candidate in "$SKUA_BIN"; do
+    if [[ ! -x "$candidate" ]]; then
+        echo "Skua executable not found: $candidate" >&2
+        exit 1
+    fi
+done
+
+if [[ ! -f "$HDBON_SCRIPT" || ! -f "$BUTLER_SCRIPT" ]]; then
+    echo "The HDBoN or Butler V4 script is missing." >&2
+    exit 1
+fi
+
+if pgrep -f "$SKUA_BIN" >/dev/null; then
+    echo "A Skua process is already running; refusing to create duplicate accounts." >&2
+    exit 1
+fi
+
+# These accounts share the existing saved farm password used by the prior launcher.
+PASS="$(python3 -c "import json; print(json.load(open('/home/max/.config/Skua/Skua.settings.json'))['manager']['ManagedAccounts']['MrPresident BR']['Password'])")"
+if [[ -z "$PASS" ]]; then
+    echo "No saved farm password is available." >&2
+    exit 1
+fi
+
+# Remove only the stale runtime port map; all Skua processes were checked above.
+rm -f "$SYNC_FILE"
+
+PIDS=()
+cleanup() {
+    echo "Stopping HDBoN farm clients..."
+    for pid in "${PIDS[@]:-}"; do
+        kill -TERM "$pid" 2>/dev/null || true
+    done
+    wait 2>/dev/null || true
+}
+trap cleanup SIGINT SIGTERM EXIT
+
+echo "Starting Bengt with the HDBoN progression runner."
+"$SKUA_BIN" -u "bengt of worlds" -p "$PASS" -s "Twilly" --run-script "$HDBON_SCRIPT" \
+    > "$LOG_DIR/hdbon_bengt.log" 2>&1 &
+BENGT_PID=$!
+PIDS+=("$BENGT_PID")
+
+VALIDATED=0
+for _ in $(seq 1 180); do
+    if ! kill -0 "$BENGT_PID" 2>/dev/null; then
+        echo "Bengt's Skua process exited during startup; inspect $LOG_DIR/hdbon_bengt.log." >&2
+        exit 1
+    fi
+    if rg -q "HDBON_RUNNER_V1: Bengt validated" "$LOG_DIR/hdbon_bengt.log"; then
+        VALIDATED=1
+        break
+    fi
+    if rg -q "HDBON is paused:" "$LOG_DIR/hdbon_bengt.log"; then
+        echo "Bengt failed the runner's level or membership check; inspect $LOG_DIR/hdbon_bengt.log." >&2
+        exit 1
+    fi
+    sleep 1
+done
+
+if [[ "$VALIDATED" -ne 1 ]]; then
+    echo "HDBoN runner did not reach its validated start marker; inspect $LOG_DIR/hdbon_bengt.log." >&2
+    exit 1
+fi
+
+echo "Bengt validated. Waiting for Butler V4 sync registration."
+SYNC_READY=0
+for _ in $(seq 1 120); do
+    if [[ -f "$SYNC_FILE" ]] && rg -qi 'bengt of worlds' "$SYNC_FILE"; then
+        SYNC_READY=1
+        break
+    fi
+    sleep 1
+done
+
+if [[ "$SYNC_READY" -ne 1 ]]; then
+    echo "Bengt's Butler V4 sync port was not registered; inspect $LOG_DIR/hdbon_bengt.log." >&2
+    exit 1
+fi
+
+launch_butler() {
+    local account="$1"
+    local logfile="$2"
+    echo "Starting Butler V4: $account"
+    "$SKUA_BIN" -u "$account" -p "$PASS" -s "Twilly" --run-script "$BUTLER_SCRIPT" \
+        > "$LOG_DIR/$logfile" 2>&1 &
+    PIDS+=("$!")
+    sleep 2
+}
+
+launch_butler "MrPresident BR" "hdbon_mrpresident.log"
+launch_butler "LeesDragon Prime" "hdbon_leesdragon.log"
+launch_butler "The Borges Warrion" "hdbon_borges.log"
+
+echo "HDBoN farm active: Bengt leader, three Butler V4 helpers."
+while kill -0 "$BENGT_PID" 2>/dev/null; do
+    sleep 10
+done
+
+echo "Bengt's Skua process exited."
