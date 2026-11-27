@@ -23,6 +23,7 @@ public class HollowbornDragonBladeOfNulgath
     private string? _lastEnhancedClass;
     private int _bossDeaths;
     private const int MaxBossDeaths = 15;
+    private const int BossTimeoutMinutes = 30;
     private (string Id, string Name) _serverRoom;
     private const string PotionPrepLockFile = "/home/max/.config/Skua/logs/hdbon_potion_prep.lock";
 
@@ -330,7 +331,7 @@ public class HollowbornDragonBladeOfNulgath
         Bot.Wait.ForCellChange(target.Cell);
 
         _bossDeaths = 0;
-        var deadline = DateTime.UtcNow.AddMinutes(12);
+        var deadline = DateTime.UtcNow.AddMinutes(BossTimeoutMinutes);
         var nextLog = DateTime.MinValue;
         string room = Bot.Map.RoomID.ToString();
         string fullRoom = _serverRoom.Id == room ? _serverRoom.Name : Bot.Map.FullName;
