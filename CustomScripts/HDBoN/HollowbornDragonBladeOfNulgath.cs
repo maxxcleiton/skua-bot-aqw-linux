@@ -246,6 +246,7 @@ public class HollowbornDragonBladeOfNulgath
         Core.EnsureAccept(FiendsPurgatory);
         try
         {
+            _consumables.ConfigureZubamiGear();
             using (AcquirePotionPrepLock())
             {
                 if (Bot.ShouldExit)

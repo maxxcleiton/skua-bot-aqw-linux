@@ -156,6 +156,9 @@ public class Butlerv4
             }
         }
 
+        if (_hdbon)
+            _consumables.ConfigureZubamiGear();
+
         if (_preparePotions)
         {
             string[] skipCraft = (Bot.Config!.Get<string>("SkipClassPotionCraft") ?? "")
@@ -174,6 +177,12 @@ public class Butlerv4
         {
             Bot.Skills.StartAdvanced("Void Highlord", "Def", autoEquip: false);
             Core.Logger("[Butler] Using the Void Highlord defensive skill rotation.");
+        }
+
+        if (_hdbon && string.Equals(Bot.Player.CurrentClass?.Name, "ArchPaladin", StringComparison.OrdinalIgnoreCase))
+        {
+            Bot.Skills.StartAdvanced("3 | 2 | 1");
+            Core.Logger("[Butler] ArchPaladin will keep Righteous Seal and prioritize group healing.");
         }
 
         _partyPrepared = true;
