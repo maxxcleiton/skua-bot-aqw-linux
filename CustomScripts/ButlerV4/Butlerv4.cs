@@ -78,6 +78,8 @@ public class Butlerv4
     private bool _hdbon;
     private bool _preparePotions;
     private bool _engagingLeaderTarget;
+    private DateTime _nextTargetCheck;
+    private string _visibleBoss = "";
     private bool _partyPrepared;
     private string _partyStatusFile = "";
     private string _lastPartyStatus = "";
@@ -270,19 +272,15 @@ public class Butlerv4
 
             if ((_tcpInCombat || _tcpHasTarget) && (!_hdbon || InLeaderPosition()))
             {
-                string target = _tcpMap.ToLowerInvariant() switch
-                {
-                    "deleuzetundra" when _hdbon => "Blighted Zubami",
-                    "voidsalek" when _hdbon => "Salek Sprayer",
-                    "voidnerfkitten" when _hdbon => "Sarah the NerfKitten",
-                    _ => "*",
-                };
+                string target = BossInCurrentMap() ?? "*";
                 var currentTarget = _hdbon ? Bot.Player.Target : null;
                 bool needsTarget = currentTarget?.Alive != true
                     || (target != "*" && !string.Equals(currentTarget.Name, target, StringComparison.OrdinalIgnoreCase));
                 if (!_hdbon || !_engagingLeaderTarget || needsTarget)
                 {
                     bool engaged = Bot.Combat.Attack(target);
+                    if (!engaged && _hdbon && target != "*" && !Bot.Combat.StopAttacking)
+                        engaged = Bot.Combat.SelectMonster(target);
                     if (_hdbon && engaged && !_engagingLeaderTarget)
                         Core.Logger($"[Butler] Engaged leader target: {target}.");
                     _engagingLeaderTarget = engaged;
@@ -339,9 +337,35 @@ public class Butlerv4
         && IsLeaderInSameCell()
         && string.Equals(_tcpRoom, Bot.Map?.RoomID.ToString(), StringComparison.Ordinal);
 
+    private string? BossInCurrentMap() => _tcpMap.ToLowerInvariant() switch
+    {
+        "deleuzetundra" when _hdbon => "Blighted Zubami",
+        "voidsalek" when _hdbon => "Salek Sprayer",
+        "voidnerfkitten" when _hdbon => "Sarah the NerfKitten",
+        _ => null,
+    };
+
     private void PublishCurrentPartyStatus()
     {
-        string state = _partyPrepared && InLeaderPosition() ? "READY" : "WAIT";
+        bool atPosition = _partyPrepared && InLeaderPosition();
+        string? boss = atPosition ? BossInCurrentMap() : null;
+        if (boss == null)
+            _visibleBoss = "";
+        else if (!string.Equals(_visibleBoss, boss, StringComparison.OrdinalIgnoreCase)
+            && DateTime.UtcNow >= _nextTargetCheck)
+        {
+            _nextTargetCheck = DateTime.UtcNow.AddSeconds(5);
+            var visible = Bot.Flash.Call("availableMonsters");
+            if (visible?.Contains(boss, StringComparison.OrdinalIgnoreCase) == true)
+                _visibleBoss = boss;
+            else
+            {
+                Core.Logger($"[Butler] {boss} is missing from the local cell; reloading {_tcpCell}.");
+                Bot.Map.Jump(_tcpCell, _tcpPad, autoCorrect: false);
+            }
+        }
+
+        string state = atPosition && (boss == null || _visibleBoss == boss) ? "READY" : "WAIT";
         PublishPartyStatus(state, Bot.Map?.Name ?? "", (Bot.Map?.RoomID ?? 0).ToString());
     }
 
