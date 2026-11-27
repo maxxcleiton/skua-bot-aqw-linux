@@ -243,8 +243,13 @@ public class Butlerv4
             if (_lockedZone)
             {
                 Core.Logger($"[Butler] Locked zone — tcpMap=[{_tcpMap}] tcpRoom=[{_tcpRoom}]");
-                JoinLeaderMap(_tcpMap, _tcpRoom);
-                Core.Jump(_tcpCell, _tcpPad);
+                if (_hdbon)
+                    JoinKnownHdbonRoom(_tcpMap, _tcpRoom, _tcpCell, _tcpPad);
+                else
+                {
+                    JoinLeaderMap(_tcpMap, _tcpRoom);
+                    Core.Jump(_tcpCell, _tcpPad);
+                }
                 _lockedZone = false;
                 continue;
             }
@@ -432,6 +437,8 @@ public class Butlerv4
             try
             {
                 if (Bot.ShouldExit) return;
+                if (JoinKnownHdbonRoom(_tcpMap, _tcpRoom, _tcpCell, _tcpPad))
+                    return;
                 if (Bot.Config!.Get<bool>("UseGoto"))
                     Bot.Player?.Goto(playerName);
                 else
@@ -463,6 +470,31 @@ public class Butlerv4
     /// detect those placeholder strings here and skip the join, waiting for the
     /// next broadcast (200ms later) when the leader's UI has caught up.
     /// </summary>
+    private bool JoinKnownHdbonRoom(string map, string room, string cell, string pad)
+    {
+        if (!_hdbon || (map != "voidsalek" && map != "voidnerfkitten"))
+            return false;
+
+        try
+        {
+            string file = Path.Combine(Path.GetDirectoryName(PotionPrepLockFile)!, "hdbon_leader_room.status");
+            string[] data = File.ReadAllText(file).Split('|');
+            if (data.Length != 2 || data[0] != room || !data[1].StartsWith(map + "-", StringComparison.OrdinalIgnoreCase)
+                || !int.TryParse(data[1][(map.Length + 1)..], out _))
+                return false;
+
+            if (Bot.Map.RoomID.ToString() != room)
+                Bot.Map.Join(data[1], "Enter", "Spawn", autoCorrect: false);
+            if (Bot.Map.RoomID.ToString() == room && !string.Equals(Bot.Player.Cell, cell, StringComparison.OrdinalIgnoreCase))
+                Core.Jump(cell, pad);
+            return true;
+        }
+        catch (IOException)
+        {
+            return false;
+        }
+    }
+
     private void JoinLeaderMap(string map, string room)
     {
         // Validate map — skip if empty or unknown

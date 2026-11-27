@@ -50,7 +50,7 @@ PYTHON
 
 # Remove only the stale runtime port map; all Skua processes were checked above.
 rm -f "$SYNC_FILE"
-rm -f "$LOG_DIR"/hdbon_party_*.status "$LOG_DIR/hdbon_potion_prep.lock"
+rm -f "$LOG_DIR"/hdbon_party_*.status "$LOG_DIR/hdbon_potion_prep.lock" "$LOG_DIR/hdbon_leader_room.status"
 
 PIDS=()
 cleanup() {

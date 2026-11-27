@@ -22,6 +22,7 @@ public class HollowbornDragonBladeOfNulgath
     private readonly HDBoNConsumables _consumables = new();
     private string? _lastEnhancedClass;
     private int _bossDeaths;
+    private (string Id, string Name) _serverRoom;
     private const string PotionPrepLockFile = "/home/max/.config/Skua/logs/hdbon_potion_prep.lock";
 
     private static CoreHollowborn Hollowborn
@@ -243,6 +244,7 @@ public class HollowbornDragonBladeOfNulgath
     {
         Core.Logger("HDBON stage 3/3: starting Fiend's Purgatory and its three boss drops.");
         Bot.Events.PlayerDeath += OnBossDeath;
+        Bot.Events.ExtensionPacketReceived += ObserveServerRoom;
         Core.EnsureAccept(FiendsPurgatory);
         try
         {
@@ -266,6 +268,22 @@ public class HollowbornDragonBladeOfNulgath
         finally
         {
             Bot.Events.PlayerDeath -= OnBossDeath;
+            Bot.Events.ExtensionPacketReceived -= ObserveServerRoom;
+        }
+    }
+
+    private void ObserveServerRoom(dynamic packet)
+    {
+        try
+        {
+            var data = packet["params"]?.dataObj;
+            if (packet["params"]?.type != "json" || data?.cmd != "moveToArea")
+                return;
+            _serverRoom = (Convert.ToString(data.areaId) ?? "", Convert.ToString(data.areaName) ?? "");
+        }
+        catch (Exception)
+        {
+            // Some extension packets are not map messages.
         }
     }
 
@@ -314,6 +332,10 @@ public class HollowbornDragonBladeOfNulgath
         var deadline = DateTime.UtcNow.AddMinutes(12);
         var nextLog = DateTime.MinValue;
         string room = Bot.Map.RoomID.ToString();
+        string fullRoom = _serverRoom.Id == room ? _serverRoom.Name : Bot.Map.FullName;
+        if (fullRoom.StartsWith(map + "-", StringComparison.OrdinalIgnoreCase)
+            && int.TryParse(fullRoom[(map.Length + 1)..], out _))
+            File.WriteAllText(Path.Combine(Path.GetDirectoryName(PotionPrepLockFile)!, "hdbon_leader_room.status"), $"{room}|{fullRoom}");
         string[] helpers = { "mrpresident_br", "leesdragon_prime", "the_borges_warrion", "little_mett", "bella_of_worlds" };
 
         while (!Bot.ShouldExit && DateTime.UtcNow < deadline && _bossDeaths < 3)
