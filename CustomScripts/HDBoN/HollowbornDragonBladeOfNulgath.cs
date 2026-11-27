@@ -22,7 +22,7 @@ public class HollowbornDragonBladeOfNulgath
     private readonly HDBoNConsumables _consumables = new();
     private string? _lastEnhancedClass;
     private int _bossDeaths;
-    private const int MaxBossDeaths = 15;
+    private const int MaxBossDeaths = 40;
     private const int BossTimeoutMinutes = 30;
     private (string Id, string Name) _serverRoom;
     private const string PotionPrepLockFile = "/home/max/.config/Skua/logs/hdbon_potion_prep.lock";

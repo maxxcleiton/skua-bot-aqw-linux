@@ -19,7 +19,7 @@ public class HDBoNConsumables
     {
         var adv = CoreAdvanced.Instance;
         string className = Bot.Player.CurrentClass?.Name ?? "";
-        var type = className is "Legion Revenant" or "StoneCrusher" ? EnhancementType.Wizard : EnhancementType.Lucky;
+        var type = className is "Legion Revenant" or "StoneCrusher" or "Shaman" ? EnhancementType.Wizard : EnhancementType.Lucky;
         var cape = Bot.Inventory.Items.Find(i => i.Equipped && i.Category.ToString() == "Cape");
         if (cape != null)
         {
