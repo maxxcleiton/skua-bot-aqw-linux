@@ -8,15 +8,21 @@ tags: hollowborn, nulgath, dragonblade, hdbon
 //cs_include Scripts/CoreFarms.cs
 //cs_include Scripts/Hollowborn/CoreHollowborn.cs
 //cs_include Scripts/Nation/CoreNation.cs
+//cs_include /home/max/Skua-Linux/CustomScripts/HDBoN/HDBoNConsumables.cs
 
 using Skua.Core.Interfaces;
+using System.IO;
+using System.Linq;
 
 public class HollowbornDragonBladeOfNulgath
 {
     private IScriptInterface Bot => IScriptInterface.Instance;
     private CoreBots Core => CoreBots.Instance;
     private CoreAdvanced Adv => CoreAdvanced.Instance;
+    private readonly HDBoNConsumables _consumables = new();
     private string? _lastEnhancedClass;
+    private int _bossDeaths;
+    private const string PotionPrepLockFile = "/home/max/.config/Skua/logs/hdbon_potion_prep.lock";
 
     private static CoreHollowborn Hollowborn
     {
@@ -72,8 +78,12 @@ public class HollowbornDragonBladeOfNulgath
 
         Core.Logger("HDBON_RUNNER_V1: Bengt validated; proceeding in dependency order.");
         Core.SoloClass = "Verus DoomKnight";
+        _lastEnhancedClass = Bot.Player.CurrentClass?.Name;
         Core.EquipClass(ClassType.Solo);
-        Core.AddDrop(
+        // Register keep-drops without unbanking every item up front. Required
+        // quest items are unbanked on demand below, which avoids category-slot
+        // checks failing before the inventory UI has finished initializing.
+        Bot.Drops.Add(
             "Lae's Hardcore Contract",
             "Phoenix Blade",
             "Chaotic Tentacles",
@@ -81,8 +91,12 @@ public class HollowbornDragonBladeOfNulgath
             "Blighted Zubami Badge",
             "Spoil of Salek",
             "Sarah's Souvenir",
-            "Hollowborn DragonBlade of Nulgath"
+            "Hollowborn DragonBlade of Nulgath",
+            "Dual DragonBlades of Nulgath",
+            "Fire Champion's Armor",
+            "Nightmare Carnax's Guardians"
         );
+        Core.Equip("Dual DragonBlades of Nulgath", "Fire Champion's Armor", "Nightmare Carnax's Guardians");
 
         // The contract and most of Bengt's Hollow Souls are already banked.
         Hollowborn.HardcoreContract();
@@ -228,13 +242,136 @@ public class HollowbornDragonBladeOfNulgath
     private void CompleteFiendsPurgatory()
     {
         Core.Logger("HDBON stage 3/3: starting Fiend's Purgatory and its three boss drops.");
+        Bot.Events.PlayerDeath += OnBossDeath;
         Core.EnsureAccept(FiendsPurgatory);
+        try
+        {
+            using (AcquirePotionPrepLock())
+            {
+                if (Bot.ShouldExit)
+                    return;
+                _consumables.Stock();
+            }
+            _consumables.Prepare();
 
-        Core.HuntMonster("deleuzetundra", "Blighted Zubami", "Blighted Zubami Badge");
-        Core.HuntMonster("voidsalek", "Salek Sprayer", "Spoil of Salek");
-        Core.HuntMonster("voidnerfkitten", "Sarah the NerfKitten", "Sarah's Souvenir");
+            if (!HuntBossWithParty("deleuzetundra", "Blighted Zubami", "Blighted Zubami Badge")
+                || !HuntBossWithParty("voidsalek", "Salek Sprayer", "Spoil of Salek")
+                || !HuntBossWithParty("voidnerfkitten", "Sarah the NerfKitten", "Sarah's Souvenir"))
+                return;
 
-        if (!Core.EnsureComplete(FiendsPurgatory, HollowbornDragonBlade))
-            Core.Logger("Fiend's Purgatory could not be turned in for the HDBoN. Check quest drops and inventory.", messageBox: true, stopBot: true);
+            if (!Core.EnsureComplete(FiendsPurgatory, HollowbornDragonBlade))
+                Core.Logger("Fiend's Purgatory could not be turned in for the HDBoN. Check quest drops and inventory.", messageBox: true, stopBot: true);
+        }
+        finally
+        {
+            Bot.Events.PlayerDeath -= OnBossDeath;
+        }
+    }
+
+    private void OnBossDeath()
+    {
+        _bossDeaths++;
+        Core.Logger($"HDBON_MONITOR: Bengt died during Fiend's Purgatory ({_bossDeaths} death(s) this run).", messageBox: false);
+    }
+
+    private FileStream? AcquirePotionPrepLock()
+    {
+        Directory.CreateDirectory(Path.GetDirectoryName(PotionPrepLockFile)!);
+        while (!Bot.ShouldExit)
+        {
+            try
+            {
+                return new FileStream(PotionPrepLockFile, FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None);
+            }
+            catch (IOException)
+            {
+                Core.Sleep(500);
+            }
+        }
+        return null;
+    }
+
+    private bool HuntBossWithParty(string map, string monster, string item)
+    {
+        bool HasDrop() => Bot.TempInv.Contains(item, 1) || Core.CheckInventory(item);
+
+        if (HasDrop())
+            return true;
+
+        Core.Join(map);
+        Bot.Wait.ForMapLoad(map);
+        var target = Core.FindMonster(map, monster);
+        if (target == null || string.IsNullOrEmpty(target.Cell))
+            return false;
+
+        Bot.Options.AggroAllMonsters = false;
+        Bot.Options.AggroMonsters = false;
+        Core.Jump(target.Cell, "Left");
+        Bot.Wait.ForCellChange(target.Cell);
+
+        _bossDeaths = 0;
+        var deadline = DateTime.UtcNow.AddMinutes(12);
+        var nextLog = DateTime.MinValue;
+        string room = Bot.Map.RoomID.ToString();
+        string[] helpers = { "mrpresident_br", "leesdragon_prime", "the_borges_warrion", "little_mett" };
+
+        while (!Bot.ShouldExit && DateTime.UtcNow < deadline && _bossDeaths < 3)
+        {
+            if (HasDrop())
+            {
+                Core.Logger($"HDBON drop confirmed: {item}.");
+                return true;
+            }
+
+            if (Bot.Player.Alive && Bot.Player.Cell != target.Cell)
+                Core.Jump(target.Cell, "Left");
+
+            if (Bot.Player.Alive && Bot.Player.Cell == target.Cell)
+            {
+                if (Bot.Player.HasTarget)
+                    _consumables.UseInCombat();
+                else
+                {
+                    var waiting = helpers.Where(account => !ButlerIsReady(account, map, room, target.Cell)).ToArray();
+                    if (waiting.Length == 0)
+                    {
+                        if (Bot.Combat.Attack(monster) && DateTime.UtcNow >= nextLog)
+                        {
+                            Core.Logger($"HDBON party ready in {map}-{room}/{target.Cell}; attacking {monster}.");
+                            nextLog = DateTime.UtcNow.AddSeconds(30);
+                        }
+                    }
+                    else if (DateTime.UtcNow >= nextLog)
+                    {
+                        Core.Logger($"HDBON waiting for Butlers in {map}-{room}/{target.Cell}: {string.Join(", ", waiting)}.");
+                        nextLog = DateTime.UtcNow.AddSeconds(30);
+                    }
+                }
+            }
+            Core.Sleep(500);
+        }
+
+        if (!Bot.ShouldExit)
+            Core.Logger($"HDBON paused at {monster}: {_bossDeaths} leader deaths; drop not confirmed.", stopBot: true);
+        return false;
+    }
+
+    private bool ButlerIsReady(string accountSlug, string map, string room, string cell)
+    {
+        string statusFile = Path.Combine("/home/max/.config/Skua/logs", $"hdbon_party_{accountSlug}.status");
+        try
+        {
+            if (DateTime.UtcNow - File.GetLastWriteTimeUtc(statusFile) > TimeSpan.FromSeconds(8))
+                return false;
+            string[] status = File.ReadAllText(statusFile).Split('|');
+            return status.Length == 4 && status[0] == "READY"
+                && string.Equals(status[1], map, StringComparison.OrdinalIgnoreCase)
+                && status[2] == room
+                && string.Equals(status[3], cell, StringComparison.OrdinalIgnoreCase);
+        }
+        catch (IOException)
+        {
+            return false;
+        }
     }
 }

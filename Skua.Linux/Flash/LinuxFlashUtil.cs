@@ -107,15 +107,17 @@ public class LinuxFlashUtil : IFlashUtil
 
                 string graphics = _settingsService?.Get<string>("LinuxRuffleGraphics", "vulkan") ?? "vulkan";
                 string fps = _settingsService?.Get<string>("LinuxRuffleFps", "60") ?? "60";
-                if (fps is not "display" and not "60" and not "120" and not "144" and not "240")
+                if (fps is not "15" and not "display" and not "60" and not "120" and not "144" and not "240")
                 {
                     fps = "60";
                 }
 
+                string frameRateArgs = fps == "15" ? "--max-render-rate 60 --frame-rate 15" : $"--max-render-rate {fps}";
+
                 psi = new ProcessStartInfo
                 {
                     FileName = ruffleBin,
-                    Arguments = $"--no-gui --volume 0 --tcp-connections allow --socket-allow 127.0.0.1:{port} --base \"file://{_sessionDir}/\" --storage disk --graphics {graphics} --max-render-rate {fps} --power high \"{sessionSwf}\"",
+                    Arguments = $"--no-gui --volume 0 --tcp-connections allow --socket-allow 127.0.0.1:{port} --base \"file://{_sessionDir}/\" --storage disk --graphics {graphics} {frameRateArgs} --power high \"{sessionSwf}\"",
                     WorkingDirectory = _sessionDir,
                     UseShellExecute = false
                 };

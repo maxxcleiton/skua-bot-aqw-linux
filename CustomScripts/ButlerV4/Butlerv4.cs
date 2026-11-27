@@ -6,8 +6,10 @@ tags: butler, follow, goto, tcp
 
 //cs_include Scripts/CoreBots.cs
 //cs_include Scripts/CoreAdvanced.cs
+//cs_include /home/max/Skua-Linux/CustomScripts/HDBoN/HDBoNConsumables.cs
 
 using System;
+using System.IO;
 using System.Linq;
 using System.Net.Sockets;
 using System.Text;
@@ -41,6 +43,9 @@ public class Butlerv4
         new Option<string>("Leader4Name", "Leader 4 Name", "Name of leader 4.", ""),
         new Option<string>("Leader4Butlers", "Butlers For Leader 4", "Comma-separated butler account names. Example: acc1,acc2,acc3", ""),
         new Option<bool>("AutoEnhance", "Auto Enhance", "Automatically enhance equipped class on startup.", true),
+        new Option<string>("ClassOverrides", "Per-account class overrides", "Account=class pairs separated by semicolons.", ""),
+        new Option<string>("BossGearOverrides", "Per-account boss gear", "Account=item|item pairs separated by semicolons.", ""),
+        new Option<bool>("PrepareBossPotions", "Prepare boss potions", "Stock the class-recommended potions for leader fights.", true),
         new Option<bool>("UseGoto", "Use Goto", "Use Goto to follow instead of direct Join+Jump.", true),
         CoreBots.Instance.SkipOptions,
     };
@@ -68,6 +73,15 @@ public class Butlerv4
     private bool _isParked = false;
     private bool _houseJoined = false;
     private bool _leaderPortLookupFailedLogged = false;
+    private bool _wasAlive = true;
+    private readonly HDBoNConsumables _consumables = new();
+    private bool _hdbon;
+    private bool _preparePotions;
+    private bool _partyPrepared;
+    private string _partyStatusFile = "";
+    private string _lastPartyStatus = "";
+    private DateTime _lastPartyWrite;
+    private const string PotionPrepLockFile = "/home/max/.config/Skua/logs/hdbon_potion_prep.lock";
 
     public void ScriptMain(IScriptInterface bot)
     {
@@ -76,6 +90,8 @@ public class Butlerv4
         Bot.Events.ExtensionPacketReceived += ChatListener;
 
         string myUsername = Bot.Player.Username ?? "";
+        _partyStatusFile = Path.Combine("/home/max/.config/Skua/logs", $"hdbon_party_{SafeAccountSlug(myUsername)}.status");
+        PublishPartyStatus("PREPARING", "", "");
 
         for (int i = 1; i <= 4; i++)
         {
@@ -95,6 +111,23 @@ public class Butlerv4
         }
 
         ConnectToLeader();
+        _hdbon = string.Equals(playerName, "Bengt of Worlds", StringComparison.OrdinalIgnoreCase);
+        _preparePotions = _hdbon && Bot.Config!.Get<bool>("PrepareBossPotions");
+
+        // This helper is dedicated to Bengt's HDBoN team. Apply account-specific
+        // class and damage gear before joining the leader's boss map.
+        if (_hdbon)
+        {
+            string? classOverride = GetAccountOverride("ClassOverrides", myUsername);
+            if (!string.IsNullOrWhiteSpace(classOverride) && Core.CheckInventory(classOverride))
+            {
+                Core.SoloClass = classOverride;
+                Core.EquipClass(ClassType.Solo);
+                Bot.Wait.ForItemEquip(classOverride);
+                Core.Logger($"[Butler] HDBoN class set to {classOverride}.");
+            }
+
+        }
 
         // Auto-enhance equipped class if enabled
         if (Bot.Config!.Get<bool>("AutoEnhance"))
@@ -107,6 +140,32 @@ public class Butlerv4
             }
         }
 
+        if (_hdbon)
+        {
+            string? gearOverride = GetAccountOverride("BossGearOverrides", myUsername);
+            string[] gear = (gearOverride ?? "")
+                .Split('|', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+            if (gear.Length > 0)
+            {
+                Core.Equip(gear);
+                Core.Logger($"[Butler] HDBoN damage gear equipped: {string.Join(", ", gear)}.");
+            }
+        }
+
+        if (_preparePotions)
+        {
+            using (AcquirePotionPrepLock())
+            {
+                if (!Bot.ShouldExit)
+                    _consumables.Stock();
+            }
+            if (!Bot.ShouldExit)
+                _consumables.Prepare();
+        }
+
+        _partyPrepared = true;
+        PublishPartyStatus("WAIT", "", "");
+
         DontAttack();
         FollowLeader();
 
@@ -118,9 +177,20 @@ public class Butlerv4
         while (!Bot.ShouldExit)
         {
             while (!Bot.ShouldExit && Bot.Player?.Alive != true)
+            {
+                if (_wasAlive)
+                    Core.Logger("[Butler] Player died; waiting for respawn.");
+                _wasAlive = false;
+                PublishPartyStatus("WAIT", _tcpMap, _tcpRoom);
                 Core.Sleep(250);
+            }
+
+            if (!_wasAlive)
+                Core.Logger("[Butler] Player revived.");
+            _wasAlive = true;
 
             PollTcpData();
+            PublishCurrentPartyStatus();
 
             if (_isParked)
             {
@@ -190,12 +260,88 @@ public class Butlerv4
 
             TryGotoLeader();
 
-            if (_tcpInCombat || _tcpHasTarget)
-                Bot.Combat.Attack("*");
+            if ((_tcpInCombat || _tcpHasTarget) && (!_hdbon || InLeaderPosition()))
+            {
+                string target = _tcpMap.ToLowerInvariant() switch
+                {
+                    "deleuzetundra" when _hdbon => "Blighted Zubami",
+                    "voidsalek" when _hdbon => "Salek Sprayer",
+                    "voidnerfkitten" when _hdbon => "Sarah the NerfKitten",
+                    _ => "*",
+                };
+                if (!_hdbon || !Bot.Player.HasTarget)
+                    Bot.Combat.Attack(target);
+                if (_preparePotions)
+                    _consumables.UseInCombat();
+            }
             else if ((Bot.Player?.InCombat == true || Bot.Player?.HasTarget == true) && !IsLeaderInSameCell())
                 QuickDeaggro();
 
             Core.Sleep(500);
+        }
+    }
+
+    private string? GetAccountOverride(string optionName, string accountName)
+    {
+        string overrides = Bot.Config!.Get<string>(optionName) ?? "";
+        foreach (string entry in overrides.Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+        {
+            string[] pair = entry.Split('=', 2, StringSplitOptions.TrimEntries);
+            if (pair.Length == 2 && pair[0].Equals(accountName, StringComparison.OrdinalIgnoreCase))
+                return pair[1];
+        }
+        return null;
+    }
+
+    private FileStream? AcquirePotionPrepLock()
+    {
+        Directory.CreateDirectory(Path.GetDirectoryName(PotionPrepLockFile)!);
+        while (!Bot.ShouldExit)
+        {
+            try
+            {
+                return new FileStream(PotionPrepLockFile, FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None);
+            }
+            catch (IOException)
+            {
+                Core.Sleep(500);
+            }
+        }
+        return null;
+    }
+
+    private static string SafeAccountSlug(string accountName) =>
+        new string(accountName.ToLowerInvariant().Select(c => char.IsLetterOrDigit(c) ? c : '_').ToArray()).Trim('_');
+
+    private bool InLeaderPosition() =>
+        _tcp != null && _tcp.Connected && !_isParked && !_roomFull
+        && IsLeaderInSameCell()
+        && string.Equals(_tcpRoom, Bot.Map?.RoomID.ToString(), StringComparison.Ordinal);
+
+    private void PublishCurrentPartyStatus()
+    {
+        string state = _partyPrepared && InLeaderPosition() ? "READY" : "WAIT";
+        PublishPartyStatus(state, Bot.Map?.Name ?? "", (Bot.Map?.RoomID ?? 0).ToString());
+    }
+
+    private void PublishPartyStatus(string state, string map, string room)
+    {
+        if (string.IsNullOrWhiteSpace(_partyStatusFile))
+            return;
+
+        string status = $"{state}|{map}|{room}|{Bot.Player?.Cell}";
+        if (status == _lastPartyStatus && DateTime.UtcNow - _lastPartyWrite < TimeSpan.FromSeconds(2))
+            return;
+
+        try
+        {
+            File.WriteAllText(_partyStatusFile, status);
+            _lastPartyStatus = status;
+            _lastPartyWrite = DateTime.UtcNow;
+        }
+        catch (Exception ex)
+        {
+            Core.Logger($"[Butler] Could not publish HDBoN party status: {ex.Message}");
         }
     }
 

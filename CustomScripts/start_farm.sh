@@ -26,20 +26,31 @@ if [[ ! -f "$HDBON_SCRIPT" || ! -f "$BUTLER_SCRIPT" ]]; then
     exit 1
 fi
 
-if pgrep -f "$SKUA_BIN" >/dev/null; then
+if pgrep -x Skua >/dev/null; then
     echo "A Skua process is already running; refusing to create duplicate accounts." >&2
     exit 1
 fi
 
-# These accounts share the existing saved farm password used by the prior launcher.
-PASS="$(python3 -c "import json; print(json.load(open('/home/max/.config/Skua/Skua.settings.json'))['manager']['ManagedAccounts']['MrPresident BR']['Password'])")"
-if [[ -z "$PASS" ]]; then
-    echo "No saved farm password is available." >&2
-    exit 1
-fi
+get_password() {
+    local account="$1"
+    # Bengt uses the existing shared farm login saved under MrPresident.
+    [[ "$account" != "bengt of worlds" ]] || account="MrPresident BR"
+    python3 - "$HOME/.config/Skua/Skua.settings.json" "$account" <<'PYTHON'
+import json
+import sys
+
+with open(sys.argv[1]) as settings:
+    accounts = json.load(settings)["manager"]["ManagedAccounts"]
+password = accounts.get(sys.argv[2], {}).get("Password")
+if not password:
+    sys.exit(f"No saved password for {sys.argv[2]}.")
+print(password)
+PYTHON
+}
 
 # Remove only the stale runtime port map; all Skua processes were checked above.
 rm -f "$SYNC_FILE"
+rm -f "$LOG_DIR"/hdbon_party_*.status "$LOG_DIR/hdbon_potion_prep.lock"
 
 PIDS=()
 cleanup() {
@@ -51,6 +62,7 @@ cleanup() {
 }
 trap cleanup SIGINT SIGTERM EXIT
 
+PASS="$(get_password "bengt of worlds")"
 echo "Starting Bengt with the HDBoN progression runner."
 "$SKUA_BIN" -u "bengt of worlds" -p "$PASS" -s "Twilly" --run-script "$HDBON_SCRIPT" \
     > "$LOG_DIR/hdbon_bengt.log" 2>&1 &
@@ -63,11 +75,11 @@ for _ in $(seq 1 180); do
         echo "Bengt's Skua process exited during startup; inspect $LOG_DIR/hdbon_bengt.log." >&2
         exit 1
     fi
-    if rg -q "HDBON_RUNNER_V1: Bengt validated" "$LOG_DIR/hdbon_bengt.log"; then
+    if grep -aFq "HDBON_RUNNER_V1: Bengt validated" "$LOG_DIR/hdbon_bengt.log"; then
         VALIDATED=1
         break
     fi
-    if rg -q "HDBON is paused:" "$LOG_DIR/hdbon_bengt.log"; then
+    if grep -aFq "HDBON is paused:" "$LOG_DIR/hdbon_bengt.log"; then
         echo "Bengt failed the runner's level or membership check; inspect $LOG_DIR/hdbon_bengt.log." >&2
         exit 1
     fi
@@ -82,7 +94,7 @@ fi
 echo "Bengt validated. Waiting for Butler V4 sync registration."
 SYNC_READY=0
 for _ in $(seq 1 120); do
-    if [[ -f "$SYNC_FILE" ]] && rg -qi 'bengt of worlds' "$SYNC_FILE"; then
+    if [[ -f "$SYNC_FILE" ]] && grep -aiFq 'bengt of worlds' "$SYNC_FILE"; then
         SYNC_READY=1
         break
     fi
@@ -97,8 +109,10 @@ fi
 launch_butler() {
     local account="$1"
     local logfile="$2"
+    local password
+    password="$(get_password "$account")"
     echo "Starting Butler V4: $account"
-    "$SKUA_BIN" -u "$account" -p "$PASS" -s "Twilly" --run-script "$BUTLER_SCRIPT" \
+    "$SKUA_BIN" -u "$account" -p "$password" -s "Twilly" --run-script "$BUTLER_SCRIPT" \
         > "$LOG_DIR/$logfile" 2>&1 &
     PIDS+=("$!")
     sleep 2
@@ -108,7 +122,9 @@ launch_butler "MrPresident BR" "hdbon_mrpresident.log"
 launch_butler "LeesDragon Prime" "hdbon_leesdragon.log"
 launch_butler "The Borges Warrion" "hdbon_borges.log"
 
-echo "HDBoN farm active: Bengt leader, three Butler V4 helpers."
+launch_butler "Little_mett" "hdbon_little_mett.log"
+
+echo "HDBoN farm active: Bengt and four Butler V4 helpers."
 while kill -0 "$BENGT_PID" 2>/dev/null; do
     sleep 10
 done

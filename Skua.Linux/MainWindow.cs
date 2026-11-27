@@ -1516,7 +1516,7 @@ public class MainWindow : Window
         string currentEngine = settingsSvc.Get<string>("LinuxFlashEngine", "Ruffle") ?? "Ruffle";
         string currentGfx = settingsSvc.Get<string>("LinuxRuffleGraphics", "vulkan") ?? "vulkan";
         string currentFps = settingsSvc.Get<string>("LinuxRuffleFps", "60") ?? "60";
-        if (currentFps is not "display" and not "60" and not "120" and not "144" and not "240")
+        if (currentFps is not "15" and not "display" and not "60" and not "120" and not "144" and not "240")
             currentFps = "60";
 
         ComboBox engineCombo = new()
@@ -1555,12 +1555,13 @@ public class MainWindow : Window
 
         ComboBox fpsCombo = new()
         {
-            ItemsSource = new string[] { "60 FPS (Padrão)", "120 FPS", "144 FPS", "Taxa do Monitor (Display Refresh)" },
+            ItemsSource = new string[] { "60 FPS (Padrão)", "120 FPS", "144 FPS", "Taxa do Monitor (Display Refresh)", "15 FPS (Farm)" },
             SelectedIndex = currentFps switch
             {
                 "120" => 1,
                 "144" => 2,
                 "display" => 3,
+                "15" => 4,
                 _ => 0
             },
             Width = 260
@@ -1572,6 +1573,7 @@ public class MainWindow : Window
                 1 => "120",
                 2 => "144",
                 3 => "display",
+                4 => "15",
                 _ => "60"
             };
             settingsSvc.Set("LinuxRuffleFps", chosen);
