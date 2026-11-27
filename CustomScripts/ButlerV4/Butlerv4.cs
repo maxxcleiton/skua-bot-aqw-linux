@@ -77,6 +77,7 @@ public class Butlerv4
     private readonly HDBoNConsumables _consumables = new();
     private bool _hdbon;
     private bool _preparePotions;
+    private bool _engagingLeaderTarget;
     private bool _partyPrepared;
     private string _partyStatusFile = "";
     private string _lastPartyStatus = "";
@@ -163,6 +164,12 @@ public class Butlerv4
                 _consumables.Prepare();
         }
 
+        if (_hdbon && string.Equals(Bot.Player.CurrentClass?.Name, "Void Highlord", StringComparison.OrdinalIgnoreCase))
+        {
+            Bot.Skills.StartAdvanced("Void Highlord", "Def", autoEquip: false);
+            Core.Logger("[Butler] Using the Void Highlord defensive skill rotation.");
+        }
+
         _partyPrepared = true;
         PublishPartyStatus("WAIT", "", "");
 
@@ -181,6 +188,7 @@ public class Butlerv4
                 if (_wasAlive)
                     Core.Logger("[Butler] Player died; waiting for respawn.");
                 _wasAlive = false;
+                _engagingLeaderTarget = false;
                 PublishPartyStatus("WAIT", _tcpMap, _tcpRoom);
                 Core.Sleep(250);
             }
@@ -269,13 +277,26 @@ public class Butlerv4
                     "voidnerfkitten" when _hdbon => "Sarah the NerfKitten",
                     _ => "*",
                 };
-                if (!_hdbon || !Bot.Player.HasTarget)
-                    Bot.Combat.Attack(target);
+                var currentTarget = _hdbon ? Bot.Player.Target : null;
+                bool needsTarget = currentTarget?.Alive != true
+                    || (target != "*" && !string.Equals(currentTarget.Name, target, StringComparison.OrdinalIgnoreCase));
+                if (!_hdbon || !_engagingLeaderTarget || needsTarget)
+                {
+                    bool engaged = Bot.Combat.Attack(target);
+                    if (_hdbon && engaged && !_engagingLeaderTarget)
+                        Core.Logger($"[Butler] Engaged leader target: {target}.");
+                    _engagingLeaderTarget = engaged;
+                }
+
                 if (_preparePotions)
                     _consumables.UseInCombat();
             }
-            else if ((Bot.Player?.InCombat == true || Bot.Player?.HasTarget == true) && !IsLeaderInSameCell())
-                QuickDeaggro();
+            else
+            {
+                _engagingLeaderTarget = false;
+                if ((Bot.Player?.InCombat == true || Bot.Player?.HasTarget == true) && !IsLeaderInSameCell())
+                    QuickDeaggro();
+            }
 
             Core.Sleep(500);
         }
