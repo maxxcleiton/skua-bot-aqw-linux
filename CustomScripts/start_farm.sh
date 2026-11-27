@@ -123,8 +123,9 @@ launch_butler "LeesDragon Prime" "hdbon_leesdragon.log"
 launch_butler "The Borges Warrion" "hdbon_borges.log"
 
 launch_butler "Little_mett" "hdbon_little_mett.log"
+launch_butler "Bella of Worlds" "hdbon_bella.log"
 
-echo "HDBoN farm active: Bengt and four Butler V4 helpers."
+echo "HDBoN farm active: Bengt and five Butler V4 helpers."
 while kill -0 "$BENGT_PID" 2>/dev/null; do
     sleep 10
 done

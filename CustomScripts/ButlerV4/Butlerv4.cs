@@ -132,17 +132,6 @@ public class Butlerv4
 
         }
 
-        // Auto-enhance equipped class if enabled
-        if (Bot.Config!.Get<bool>("AutoEnhance"))
-        {
-            string currentClass = Bot.Player.CurrentClass?.Name ?? "";
-            if (!string.IsNullOrEmpty(currentClass) && Core.CheckInventory(currentClass))
-            {
-                Core.Logger($"[Butler] Auto-enhancing class: {currentClass}");
-                Adv.SmartEnhance(currentClass);
-            }
-        }
-
         if (_hdbon)
         {
             string? gearOverride = GetAccountOverride("BossGearOverrides", myUsername);
@@ -152,6 +141,17 @@ public class Butlerv4
             {
                 Core.Equip(gear);
                 Core.Logger($"[Butler] HDBoN damage gear equipped: {string.Join(", ", gear)}.");
+            }
+        }
+
+        // Auto-enhance equipped class if enabled
+        if (Bot.Config!.Get<bool>("AutoEnhance"))
+        {
+            string currentClass = Bot.Player.CurrentClass?.Name ?? "";
+            if (!string.IsNullOrEmpty(currentClass) && Core.CheckInventory(currentClass))
+            {
+                Core.Logger($"[Butler] Auto-enhancing class: {currentClass}");
+                Adv.SmartEnhance(currentClass);
             }
         }
 

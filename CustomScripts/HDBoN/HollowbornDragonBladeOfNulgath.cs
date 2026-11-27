@@ -313,7 +313,7 @@ public class HollowbornDragonBladeOfNulgath
         var deadline = DateTime.UtcNow.AddMinutes(12);
         var nextLog = DateTime.MinValue;
         string room = Bot.Map.RoomID.ToString();
-        string[] helpers = { "mrpresident_br", "leesdragon_prime", "the_borges_warrion", "little_mett" };
+        string[] helpers = { "mrpresident_br", "leesdragon_prime", "the_borges_warrion", "little_mett", "bella_of_worlds" };
 
         while (!Bot.ShouldExit && DateTime.UtcNow < deadline && _bossDeaths < 3)
         {
