@@ -22,6 +22,7 @@ public class HollowbornDragonBladeOfNulgath
     private readonly HDBoNConsumables _consumables = new();
     private string? _lastEnhancedClass;
     private int _bossDeaths;
+    private const int MaxBossDeaths = 15;
     private (string Id, string Name) _serverRoom;
     private const string PotionPrepLockFile = "/home/max/.config/Skua/logs/hdbon_potion_prep.lock";
 
@@ -338,7 +339,7 @@ public class HollowbornDragonBladeOfNulgath
             File.WriteAllText(Path.Combine(Path.GetDirectoryName(PotionPrepLockFile)!, "hdbon_leader_room.status"), $"{room}|{fullRoom}");
         string[] helpers = { "mrpresident_br", "leesdragon_prime", "the_borges_warrion", "little_mett", "bella_of_worlds" };
 
-        while (!Bot.ShouldExit && DateTime.UtcNow < deadline && _bossDeaths < 3)
+        while (!Bot.ShouldExit && DateTime.UtcNow < deadline && _bossDeaths < MaxBossDeaths)
         {
             if (HasDrop())
             {
