@@ -11,13 +11,13 @@ public class HDBoNConsumables
     private DateTime _buffedAt = DateTime.MinValue;
     private DateTime _lastPhiltre = DateTime.MinValue;
 
-    public void Stock()
+    public void Stock(bool craftClassPotions = true)
     {
         if (!Core.CheckInventory(Philtre, 10))
             CoreAdvanced.Instance.BuyItem("alchemyacademy", 2036, Philtre, 10);
         // Try stocking a class preset once per launch. Existing VHL elixir is enough
         // to keep the party moving if the previous tonic craft was rejected.
-        if (!_potions.HasAssignedClass("Void Highlord") || !Core.CheckInventory("Potent Battle Elixir", 1))
+        if (craftClassPotions && (!_potions.HasAssignedClass("Void Highlord") || !Core.CheckInventory("Potent Battle Elixir", 1)))
             _potions.EnsurePotions(desiredQuant: 3, skipThird: true);
     }
 

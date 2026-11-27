@@ -45,6 +45,7 @@ public class Butlerv4
         new Option<bool>("AutoEnhance", "Auto Enhance", "Automatically enhance equipped class on startup.", true),
         new Option<string>("ClassOverrides", "Per-account class overrides", "Account=class pairs separated by semicolons.", ""),
         new Option<string>("BossGearOverrides", "Per-account boss gear", "Account=item|item pairs separated by semicolons.", ""),
+        new Option<string>("SkipClassPotionCraft", "Skip crafting class potions", "Comma-separated accounts that should use their stocked tonics and elixirs.", ""),
         new Option<bool>("PrepareBossPotions", "Prepare boss potions", "Stock the class-recommended potions for leader fights.", true),
         new Option<bool>("UseGoto", "Use Goto", "Use Goto to follow instead of direct Join+Jump.", true),
         CoreBots.Instance.SkipOptions,
@@ -157,10 +158,13 @@ public class Butlerv4
 
         if (_preparePotions)
         {
+            string[] skipCraft = (Bot.Config!.Get<string>("SkipClassPotionCraft") ?? "")
+                .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+            bool craftClassPotions = !skipCraft.Contains(myUsername, StringComparer.OrdinalIgnoreCase);
             using (AcquirePotionPrepLock())
             {
                 if (!Bot.ShouldExit)
-                    _consumables.Stock();
+                    _consumables.Stock(craftClassPotions);
             }
             if (!Bot.ShouldExit)
                 _consumables.Prepare();
