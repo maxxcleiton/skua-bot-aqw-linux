@@ -17,3 +17,12 @@ Run `/ultratyndarius` daily from this checkout via `systemd`:
 systemd-run --user --collect --unit=skua-tyndarius --working-directory=/home/max/Skua-Linux /bin/bash /home/max/Skua-Linux/CustomScripts/Ultras/start_tyndarius.sh
 ```
 Check progress/results in `~/.config/Skua/logs/tyndarius_{bengt,little_mett,mrpresident,leesdragon}.log` and stop afterwards with `systemctl --user stop skua-tyndarius`.
+
+- `Ultras/UltraSpeaker.cs`: 4-account coordinated weekly runner for `/ultraspeaker` (Quest `9173`, `Malgor Insignia`, 5 insignias/week). Uses `Little_mett` (`ArchPaladin`, `Valiance` + `Forge` + `Penitence`), `LeesDragon Prime` (`Lord of Order`, `Healer` + `Lacerate`, requires `SpellCrafting` Rank 5 for `Scroll of Enrage`), `MrPresident BR` (`StoneCrusher`, `Valiance` + `Forge` + `Penitence`), and `bengt of worlds` (`Verus DoomKnight`, `Valiance` + `Forge` + `Penitence`, Equal zone coordinator + `Unleash Doom` `Decay`). Features packet-driven aura tracking, `Bot.Skills.Stop()` override, non-blocking positioning, MapID `1` target recovery, dynamic `EnrageReady`/Sanctity-first taunt rotation (`700ms`/`1400ms`/`1680ms`), and Equal zone soak coordination.
+- `Ultras/start_speaker.sh`: 4-client launcher (`Twilly`, 6s login stagger, clears stale `ultra_speaker*.sync` and `UltraSpeaker*.sync` files).
+
+Run `/ultraspeaker` weekly from this checkout via `systemd`:
+```bash
+systemd-run --user --collect --unit=skua-speaker --working-directory=/home/max/Skua-Linux /bin/bash /home/max/Skua-Linux/CustomScripts/Ultras/start_speaker.sh
+```
+Check progress/results in `~/.config/Skua/logs/speaker_{bengt,little_mett,mrpresident,leesdragon}.log` and stop afterwards with `systemctl --user stop skua-speaker`.
